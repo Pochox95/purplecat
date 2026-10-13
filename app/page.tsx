@@ -201,11 +201,7 @@ export default function InventarioPage() {
               aria-label="Cambiar logo de Purple cat"
               className="group relative size-16 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-500/60 bg-[#140b20] shadow-[0_0_24px_-4px_rgba(192,38,211,0.8)] transition hover:border-fuchsia-300 md:size-20"
             >
-              {logo ? (
-                <img src={logo} alt="Logo de Purple cat" className="size-full object-cover" />
-              ) : (
-                <span className="font-gothic flex size-full items-center justify-center text-3xl text-fuchsia-300 md:text-4xl">P</span>
-              )}
+              <img src={logo ?? '/logo-purple-cat.png'} alt="Logo de Purple cat" className="size-full object-cover" />
             </button>
             <div className="min-w-0">
               <h1 className="font-gothic text-balance text-4xl leading-none text-violet-50 drop-shadow-[0_0_12px_rgba(192,132,252,0.55)] md:text-5xl">
