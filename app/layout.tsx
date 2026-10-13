@@ -1,10 +1,13 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { UnifrakturMaguntia } from 'next/font/google'
 import './globals.css'
 
+const unifraktur = UnifrakturMaguntia({ weight: '400', subsets: ['latin'], variable: '--font-unifraktur', display: 'swap' })
+
 export const metadata: Metadata = {
-  title: 'Inventario | Tienda de ropa',
-  description: 'Sistema de gestión de inventario para tienda de ropa',
+  title: 'Purple cat | Control de Inventario - Ropa Gótica',
+  description: 'Sistema de gestión de inventario de Purple cat, tienda de ropa gótica',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -26,11 +29,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  colorScheme: 'dark',
+  themeColor: '#08040d',
 }
 
 export default function RootLayout({
@@ -39,8 +39,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es">
-      <body className="antialiased">
+    <html lang="es" className={`${unifraktur.variable} bg-[#08040d]`}>
+      <body className="antialiased bg-[#08040d]">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
