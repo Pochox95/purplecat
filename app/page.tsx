@@ -1,489 +1,302 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
-type Prenda = {
-  id: string
-  nombre: string
+interface Producto {
+  id: number
   sku: string
+  nombre: string
   categoria: string
   talla: string
   color: string
-  costo: number
-  venta: number
+  precio_costo: number
+  precio_venta: number
   stock: number
+  stock_minimo: number
+  descripcion: string
+  image_url: string
+  created_at: string
 }
 
-type Formulario = Omit<Prenda, 'id' | 'costo' | 'venta' | 'stock'> & {
-  costo: string
-  venta: string
-  stock: string
-}
+const CATEGORIAS = ['Todas', 'Corsets', 'Vestidos', 'Remeras/Tops', 'Pantalones/Faldas', 'Abrigos/Capas', 'Accesorios', 'Calzado']
+const TALLAS = ['Todas', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'Única']
 
-const CATEGORIAS = [
-  'Corsets',
-  'Vestidos',
-  'Remeras/Tops',
-  'Pantalones/Faldas',
-  'Abrigos/Capas',
-  'Accesorios/Gargantillas',
-  'Calzado',
-]
-const TALLAS = ['XS', 'S', 'M', 'L', 'XL']
-const STOCK_BAJO = 3
-const CLAVE_STORAGE = 'purple-cat-inventario-v1'
-const CLAVE_LOGO = 'purple-cat-logo-v1'
-
-const EJEMPLOS: Prenda[] = [
-  { id: '1', nombre: 'Corset victoriano de encaje', sku: 'COR-001', categoria: 'Corsets', talla: 'S', color: 'Negro', costo: 18000, venta: 39900, stock: 7 },
-  { id: '2', nombre: 'Vestido terciopelo largo', sku: 'VES-013', categoria: 'Vestidos', talla: 'M', color: 'Bordó', costo: 22000, venta: 48500, stock: 2 },
-  { id: '3', nombre: 'Top de malla con mangas', sku: 'TOP-021', categoria: 'Remeras/Tops', talla: 'M', color: 'Negro', costo: 6500, venta: 14900, stock: 11 },
-  { id: '4', nombre: 'Falda plisada con hebillas', sku: 'FAL-008', categoria: 'Pantalones/Faldas', talla: 'L', color: 'Violeta', costo: 9800, venta: 21900, stock: 0 },
-  { id: '5', nombre: 'Capa con capucha', sku: 'CAP-003', categoria: 'Abrigos/Capas', talla: 'XL', color: 'Negro', costo: 26000, venta: 57000, stock: 4 },
-  { id: '6', nombre: 'Gargantilla de terciopelo', sku: 'ACC-045', categoria: 'Accesorios/Gargantillas', talla: 'S', color: 'Púrpura', costo: 1800, venta: 5500, stock: 1 },
-]
-
-const FORM_VACIO: Formulario = {
-  nombre: '', sku: '', categoria: CATEGORIAS[0], talla: 'M', color: '', costo: '', venta: '', stock: '0',
-}
-
-const dinero = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
-
-const campo =
-  'w-full rounded-lg border border-violet-500/25 bg-[#0d0716] px-3 py-2.5 text-sm text-violet-50 placeholder:text-violet-300/40 outline-none transition focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-500/25 [color-scheme:dark]'
-const btnPrimario =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_18px_-2px_rgba(168,85,247,0.7)] transition hover:bg-violet-500 hover:shadow-[0_0_26px_0_rgba(192,132,252,0.85)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300'
-const btnSecundario =
-  'inline-flex items-center justify-center gap-2 rounded-lg border border-violet-500/40 bg-violet-950/40 px-4 py-2.5 text-sm font-medium text-violet-100 transition hover:border-fuchsia-400 hover:bg-violet-900/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300'
-
-function redimensionarImagen(archivo: File, max = 320): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const lector = new FileReader()
-    lector.onerror = () => reject(new Error('No se pudo leer el archivo'))
-    lector.onload = () => {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.onerror = () => reject(new Error('Imagen inválida'))
-      img.onload = () => {
-        const escala = Math.min(1, max / Math.max(img.width, img.height))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.round(img.width * escala)
-        canvas.height = Math.round(img.height * escala)
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return reject(new Error('Canvas no disponible'))
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/png'))
-      }
-      img.src = String(lector.result)
-    }
-    lector.readAsDataURL(archivo)
-  })
-}
-
-export default function InventarioPage() {
-  const [prendas, setPrendas] = useState<Prenda[]>([])
-  const [cargado, setCargado] = useState(false)
-  const [logo, setLogo] = useState<string | null>(null)
-  const [errorLogo, setErrorLogo] = useState('')
+export default function Home() {
+  const [productos, setProductos] = useState<Producto[]>([])
+  const [loading, setLoading] = useState(true)
   const [busqueda, setBusqueda] = useState('')
-  const [filtroTalla, setFiltroTalla] = useState('')
-  const [filtroCategoria, setFiltroCategoria] = useState('')
-  const [modalAbierto, setModalAbierto] = useState(false)
-  const [editandoId, setEditandoId] = useState<string | null>(null)
-  const [form, setForm] = useState<Formulario>(FORM_VACIO)
-  const [error, setError] = useState('')
-  const [aEliminar, setAEliminar] = useState<Prenda | null>(null)
-  const inputLogo = useRef<HTMLInputElement>(null)
+  const [filtroCategoria, setFiltroCategoria] = useState('Todas')
+  const [filtroTalla, setFiltroTalla] = useState('Todas')
+  const [mostrarModal, setMostrarModal] = useState(false)
+  const [editando, setEditando] = useState<Producto | null>(null)
+  const [subiendoImagen, setSubiendoImagen] = useState(false)
 
-  useEffect(() => {
-    try {
-      const guardado = localStorage.getItem(CLAVE_STORAGE)
-      setPrendas(guardado ? JSON.parse(guardado) : EJEMPLOS)
-      setLogo(localStorage.getItem(CLAVE_LOGO))
-    } catch {
-      setPrendas(EJEMPLOS)
+  const [form, setForm] = useState({
+    sku: '', nombre: '', categoria: 'Corsets', talla: 'M', color: 'Negro',
+    precio_costo: 0, precio_venta: 0, stock: 0, stock_minimo: 3,
+    descripcion: '', image_url: ''
+  })
+
+  const cargarProductos = async () => {
+    const { data } = await supabase.from('productos').select('*').order('created_at', { ascending: false })
+    if (data) setProductos(data)
+    setLoading(false)
+  }
+
+  useEffect(() => { cargarProductos() }, [])
+
+  const subirImagen = async (file: File) => {
+    setSubiendoImagen(true)
+    const ext = file.name.split('.').pop()
+    const nombre = `${Date.now()}.${ext}`
+    const { data } = await supabase.storage.from('product-images').upload(nombre, file)
+    if (data) {
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(nombre)
+      setForm(prev => ({ ...prev, image_url: urlData.publicUrl }))
     }
-    setCargado(true)
-  }, [])
+    setSubiendoImagen(false)
+  }
 
-  useEffect(() => {
-    if (cargado) localStorage.setItem(CLAVE_STORAGE, JSON.stringify(prendas))
-  }, [prendas, cargado])
-
-  const resumen = useMemo(() => ({
-    unidades: prendas.reduce((t, p) => t + p.stock, 0),
-    valor: prendas.reduce((t, p) => t + p.stock * p.venta, 0),
-    costo: prendas.reduce((t, p) => t + p.stock * p.costo, 0),
-    agotadas: prendas.filter((p) => p.stock === 0).length,
-    bajas: prendas.filter((p) => p.stock > 0 && p.stock < STOCK_BAJO).length,
-  }), [prendas])
-
-  const filtradas = useMemo(() => {
-    const q = busqueda.trim().toLowerCase()
-    return prendas.filter((p) => {
-      const coincide = !q || [p.nombre, p.color, p.sku].some((v) => v.toLowerCase().includes(q))
-      return coincide && (!filtroTalla || p.talla === filtroTalla) && (!filtroCategoria || p.categoria === filtroCategoria)
-    })
-  }, [prendas, busqueda, filtroTalla, filtroCategoria])
-
-  async function cambiarLogo(e: React.ChangeEvent<HTMLInputElement>) {
-    const archivo = e.target.files?.[0]
-    e.target.value = ''
-    if (!archivo) return
-    if (!archivo.type.startsWith('image/')) return setErrorLogo('El archivo debe ser una imagen.')
-    try {
-      const dataUrl = await redimensionarImagen(archivo)
-      localStorage.setItem(CLAVE_LOGO, dataUrl)
-      setLogo(dataUrl)
-      setErrorLogo('')
-    } catch {
-      setErrorLogo('No se pudo cargar el logo. Probá con otra imagen.')
+  const guardar = async () => {
+    if (!form.nombre) return alert('Escribe el nombre de la prenda')
+    if (editando) {
+      await supabase.from('productos').update(form).eq('id', editando.id)
+    } else {
+      await supabase.from('productos').insert([form])
     }
+    cerrarModal()
+    cargarProductos()
   }
 
-  function ajustarStock(id: string, delta: number) {
-    setPrendas((prev) => prev.map((p) => (p.id === id ? { ...p, stock: Math.max(0, p.stock + delta) } : p)))
+  const cambiarStock = async (id: number, cambio: number) => {
+    const prod = productos.find(p => p.id === id)
+    if (!prod) return
+    const nuevo = prod.stock + cambio
+    if (nuevo < 0) return
+    await supabase.from('productos').update({ stock: nuevo }).eq('id', id)
+    cargarProductos()
   }
 
-  function abrirNueva() {
-    setEditandoId(null)
-    setForm(FORM_VACIO)
-    setError('')
-    setModalAbierto(true)
+  const eliminar = async (id: number) => {
+    if (!confirm('¿Eliminar esta prenda?')) return
+    await supabase.from('productos').delete().eq('id', id)
+    cargarProductos()
   }
 
-  function abrirEdicion(p: Prenda) {
-    setEditandoId(p.id)
-    setForm({ ...p, costo: String(p.costo), venta: String(p.venta), stock: String(p.stock) })
-    setError('')
-    setModalAbierto(true)
+  const abrirModal = (prod?: Producto) => {
+    if (prod) {
+      setEditando(prod)
+      setForm({
+        sku: prod.sku, nombre: prod.nombre, categoria: prod.categoria,
+        talla: prod.talla, color: prod.color, precio_costo: prod.precio_costo,
+        precio_venta: prod.precio_venta, stock: prod.stock,
+        stock_minimo: prod.stock_minimo, descripcion: prod.descripcion,
+        image_url: prod.image_url
+      })
+    } else {
+      setEditando(null)
+      setForm({
+        sku: '', nombre: '', categoria: 'Corsets', talla: 'M', color: 'Negro',
+        precio_costo: 0, precio_venta: 0, stock: 0, stock_minimo: 3,
+        descripcion: '', image_url: ''
+      })
+    }
+    setMostrarModal(true)
   }
 
-  function guardar(e: React.FormEvent) {
-    e.preventDefault()
-    const costo = Number(form.costo)
-    const venta = Number(form.venta)
-    const stock = Number(form.stock)
-    const sku = form.sku.trim().toUpperCase()
+  const cerrarModal = () => { setMostrarModal(false); setEditando(null) }
 
-    if (!form.nombre.trim() || !sku || !form.color.trim()) return setError('Completá nombre, SKU y color.')
-    if ([costo, venta].some((n) => !Number.isFinite(n) || n < 0)) return setError('Los precios deben ser números positivos.')
-    if (!Number.isInteger(stock) || stock < 0) return setError('El stock debe ser un número entero mayor o igual a 0.')
-    if (prendas.some((p) => p.sku === sku && p.id !== editandoId)) return setError('Ya existe una prenda con ese SKU.')
+  const filtrados = productos.filter(p => {
+    const matchB = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+      p.sku.toLowerCase().includes(busqueda.toLowerCase()) ||
+      p.color.toLowerCase().includes(busqueda.toLowerCase())
+    const matchC = filtroCategoria === 'Todas' || p.categoria === filtroCategoria
+    const matchT = filtroTalla === 'Todas' || p.talla === filtroTalla
+    return matchB && matchC && matchT
+  })
 
-    const datos = { nombre: form.nombre.trim(), sku, categoria: form.categoria, talla: form.talla, color: form.color.trim(), costo, venta, stock }
-    setPrendas((prev) =>
-      editandoId ? prev.map((p) => (p.id === editandoId ? { ...p, ...datos } : p)) : [{ id: crypto.randomUUID(), ...datos }, ...prev],
-    )
-    setModalAbierto(false)
-  }
+  const totalStock = productos.reduce((s, p) => s + p.stock, 0)
+  const valorTotal = productos.reduce((s, p) => s + p.stock * p.precio_venta, 0)
+  const agotados = productos.filter(p => p.stock === 0).length
+  const stockBajo = productos.filter(p => p.stock > 0 && p.stock < p.stock_minimo).length
 
-  function confirmarEliminar() {
-    if (aEliminar) setPrendas((prev) => prev.filter((p) => p.id !== aEliminar.id))
-    setAEliminar(null)
-  }
-
-  const categoriasForm = CATEGORIAS.includes(form.categoria) ? CATEGORIAS : [form.categoria, ...CATEGORIAS]
-
-  return (
-    <main className="relative min-h-screen overflow-hidden bg-[#08040d] text-violet-50">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.28),transparent_65%)]"
-      />
-
-      <div className="relative mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-6 md:py-10">
-        <header className="flex flex-col gap-5 border-b border-violet-500/20 pb-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => inputLogo.current?.click()}
-              aria-label="Cambiar logo de Purple cat"
-              className="group relative size-16 shrink-0 overflow-hidden rounded-full border-2 border-fuchsia-500/60 bg-[#140b20] shadow-[0_0_24px_-4px_rgba(192,38,211,0.8)] transition hover:border-fuchsia-300 md:size-20"
-            >
-              <img src={logo ?? '/logo-purple-cat.png'} alt="Logo de Purple cat" className="size-full object-cover" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="font-gothic text-balance text-4xl leading-none text-violet-50 drop-shadow-[0_0_12px_rgba(192,132,252,0.55)] md:text-5xl">
-                Purple cat
-              </h1>
-              <p className="mt-2 text-xs font-medium uppercase tracking-[0.25em] text-violet-300/80 md:text-sm">
-                Control de Inventario - Ropa Gótica
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2 sm:flex">
-              <button type="button" onClick={() => inputLogo.current?.click()} className={btnSecundario}>
-                <IconoImagen />
-                Cambiar Logo
-              </button>
-              <button type="button" onClick={abrirNueva} className={btnPrimario}>
-                <span aria-hidden="true" className="text-lg leading-none">+</span>
-                Agregar prenda
-              </button>
-            </div>
-            {errorLogo && <p role="alert" className="text-xs text-rose-400">{errorLogo}</p>}
-            <input ref={inputLogo} type="file" accept="image/*" onChange={cambiarLogo} className="sr-only" tabIndex={-1} aria-hidden="true" />
-          </div>
-        </header>
-
-        <section aria-label="Resumen" className="grid grid-cols-1 gap-3 sm:grid-cols-3 md:gap-4">
-          <Tarjeta titulo="Prendas en stock" valor={resumen.unidades.toLocaleString('es-AR')} detalle={`${prendas.length} artículos distintos`} />
-          <Tarjeta titulo="Valor del inventario" valor={dinero.format(resumen.valor)} detalle={`Costo: ${dinero.format(resumen.costo)}`} />
-          <Tarjeta titulo="Prendas agotadas" valor={String(resumen.agotadas)} detalle={`${resumen.bajas} con stock bajo`} alerta={resumen.agotadas > 0} />
-        </section>
-
-        <section aria-label="Filtros" className="flex flex-col gap-3 rounded-xl border border-violet-500/20 bg-[#140d1f]/80 p-3 backdrop-blur md:flex-row">
-          <label className="flex-1">
-            <span className="sr-only">Buscar</span>
-            <input
-              type="search"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por nombre, color o SKU..."
-              className={campo}
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3 md:flex">
-            <label>
-              <span className="sr-only">Filtrar por categoría</span>
-              <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)} className={campo}>
-                <option value="">Todas las categorías</option>
-                {CATEGORIAS.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Filtrar por talla</span>
-              <select value={filtroTalla} onChange={(e) => setFiltroTalla(e.target.value)} className={campo}>
-                <option value="">Todas las tallas</option>
-                {TALLAS.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <section aria-label="Catálogo de prendas">
-          <p className="mb-3 text-sm text-violet-300/70" aria-live="polite">
-            {cargado ? `Mostrando ${filtradas.length} de ${prendas.length} prendas` : 'Cargando...'}
-          </p>
-
-          {cargado && filtradas.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-violet-500/30 bg-[#140d1f] p-10 text-center text-sm text-violet-300/70">
-              No se encontraron prendas.
-            </div>
-          ) : (
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
-              {filtradas.map((p) => {
-                const bajo = p.stock < STOCK_BAJO
-                return (
-                  <li
-                    key={p.id}
-                    className={`flex flex-col gap-4 rounded-xl border bg-gradient-to-b from-[#1a1128] to-[#120b1c] p-4 transition ${
-                      bajo
-                        ? 'border-red-500/70 shadow-[0_0_20px_-6px_rgba(239,68,68,0.7)]'
-                        : 'border-violet-500/25 hover:border-violet-400/60 hover:shadow-[0_0_22px_-8px_rgba(168,85,247,0.8)]'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate font-semibold text-violet-50">{p.nombre}</h2>
-                        <p className="font-mono text-xs text-violet-300/60">{p.sku}</p>
-                      </div>
-                      {bajo && (
-                        <span className="shrink-0 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white">
-                          {p.stock === 0 ? 'Agotado' : 'Stock bajo'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 text-xs">
-                      <Etiqueta>{p.categoria}</Etiqueta>
-                      <Etiqueta>Talla {p.talla}</Etiqueta>
-                      <Etiqueta>{p.color}</Etiqueta>
-                    </div>
-
-                    <dl className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <dt className="text-xs text-violet-300/60">Costo</dt>
-                        <dd className="text-violet-200">{dinero.format(p.costo)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-violet-300/60">Venta</dt>
-                        <dd className="font-semibold text-fuchsia-200">{dinero.format(p.venta)}</dd>
-                      </div>
-                    </dl>
-
-                    <div className="flex items-center justify-between gap-3 border-t border-violet-500/15 pt-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => ajustarStock(p.id, -1)}
-                          disabled={p.stock === 0}
-                          aria-label={`Restar una unidad de ${p.nombre} (venta)`}
-                          className="size-10 rounded-lg bg-rose-900 text-sm font-bold text-rose-50 transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-35"
-                        >
-                          -1
-                        </button>
-                        <span
-                          className={`min-w-12 text-center text-2xl font-bold tabular-nums ${bajo ? 'text-red-500' : 'text-violet-50'}`}
-                          aria-label={`Stock actual: ${p.stock}`}
-                        >
-                          {p.stock}
-                        </span>
-                        <button
-                          onClick={() => ajustarStock(p.id, 1)}
-                          aria-label={`Sumar una unidad de ${p.nombre} (compra)`}
-                          className="size-10 rounded-lg bg-violet-600 text-sm font-bold text-white shadow-[0_0_14px_-2px_rgba(168,85,247,0.8)] transition hover:bg-violet-500"
-                        >
-                          +1
-                        </button>
-                      </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => abrirEdicion(p)} className="rounded-lg px-3 py-2 text-sm text-violet-200 transition hover:bg-violet-500/15">
-                          Editar
-                        </button>
-                        <button onClick={() => setAEliminar(p)} className="rounded-lg px-3 py-2 text-sm text-rose-400 transition hover:bg-rose-500/10">
-                          Eliminar
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
-
-        <footer className="pt-2 text-center text-xs text-violet-300/40">
-          Los datos se guardan automáticamente en este dispositivo.
-        </footer>
-      </div>
-
-      {modalAbierto && (
-        <Modal titulo={editandoId ? 'Editar prenda' : 'Nueva prenda'} onCerrar={() => setModalAbierto(false)}>
-          <form onSubmit={guardar} className="flex flex-col gap-3">
-            <Campo etiqueta="Nombre">
-              <input className={campo} value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} autoFocus />
-            </Campo>
-            <div className="grid grid-cols-2 gap-3">
-              <Campo etiqueta="SKU">
-                <input className={`${campo} font-mono uppercase`} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
-              </Campo>
-              <Campo etiqueta="Color">
-                <input className={campo} value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
-              </Campo>
-              <Campo etiqueta="Categoría">
-                <select className={campo} value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-                  {categoriasForm.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              </Campo>
-              <Campo etiqueta="Talla">
-                <select className={campo} value={form.talla} onChange={(e) => setForm({ ...form, talla: e.target.value })}>
-                  {TALLAS.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </Campo>
-              <Campo etiqueta="Precio costo">
-                <input className={campo} type="number" min="0" step="any" inputMode="decimal" value={form.costo} onChange={(e) => setForm({ ...form, costo: e.target.value })} />
-              </Campo>
-              <Campo etiqueta="Precio venta">
-                <input className={campo} type="number" min="0" step="any" inputMode="decimal" value={form.venta} onChange={(e) => setForm({ ...form, venta: e.target.value })} />
-              </Campo>
-            </div>
-            <Campo etiqueta="Stock actual">
-              <input className={campo} type="number" min="0" step="1" inputMode="numeric" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
-            </Campo>
-            {error && <p role="alert" className="text-sm text-rose-400">{error}</p>}
-            <div className="mt-2 flex justify-end gap-2">
-              <button type="button" onClick={() => setModalAbierto(false)} className={btnSecundario}>
-                Cancelar
-              </button>
-              <button type="submit" className={btnPrimario}>
-                Guardar
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {aEliminar && (
-        <Modal titulo="Eliminar prenda" onCerrar={() => setAEliminar(null)}>
-          <p className="text-sm text-violet-200/80">
-            {'¿Seguro que querés eliminar '}<strong className="text-violet-50">{aEliminar.nombre}</strong>{` (${aEliminar.sku})? Esta acción no se puede deshacer.`}
-          </p>
-          <div className="mt-5 flex justify-end gap-2">
-            <button onClick={() => setAEliminar(null)} className={btnSecundario}>Cancelar</button>
-            <button onClick={confirmarEliminar} className="rounded-lg bg-rose-900 px-4 py-2.5 text-sm font-semibold text-rose-50 transition hover:bg-rose-800">
-              Eliminar
-            </button>
-          </div>
-        </Modal>
-      )}
-    </main>
-  )
-}
-
-function Tarjeta({ titulo, valor, detalle, alerta }: { titulo: string; valor: string; detalle: string; alerta?: boolean }) {
-  return (
-    <div
-      className={`rounded-xl border p-4 md:p-5 ${
-        alerta ? 'border-red-500/50 bg-gradient-to-b from-red-950/60 to-[#140d1f]' : 'border-violet-500/25 bg-gradient-to-b from-[#1c1230] to-[#120b1c]'
-      }`}
-    >
-      <p className={`text-xs font-medium uppercase tracking-widest ${alerta ? 'text-red-300' : 'text-violet-300/70'}`}>{titulo}</p>
-      <p className={`mt-2 text-2xl font-bold tabular-nums md:text-3xl ${alerta ? 'text-red-400' : 'text-violet-50'}`}>{valor}</p>
-      <p className="mt-1 text-xs text-violet-300/60">{detalle}</p>
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-purple-400 text-xl animate-pulse">🐱 Cargando Purple Cat...</div>
     </div>
   )
-}
-
-function Etiqueta({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-md border border-violet-500/20 bg-violet-500/10 px-2 py-1 text-violet-200">{children}</span>
-}
-
-function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-violet-300/80">{etiqueta}</span>
-      {children}
-    </label>
-  )
-}
-
-function IconoImagen() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="9" cy="9" r="2" />
-      <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
-    </svg>
-  )
-}
-
-function Modal({ titulo, onCerrar, children }: { titulo: string; onCerrar: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const alPresionar = (e: KeyboardEvent) => e.key === 'Escape' && onCerrar()
-    window.addEventListener('keydown', alPresionar)
-    return () => window.removeEventListener('keydown', alPresionar)
-  }, [onCerrar])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onCerrar}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={titulo}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-violet-500/40 bg-[#140d1f] p-5 text-violet-50 shadow-[0_0_40px_-10px_rgba(168,85,247,0.8)] sm:max-w-md sm:rounded-2xl"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-gothic text-2xl text-violet-50">{titulo}</h2>
-          <button onClick={onCerrar} aria-label="Cerrar" className="rounded-lg px-2 py-1 text-violet-300 hover:bg-violet-500/15">
-            ✕
-          </button>
+    <div className="min-h-screen bg-[#0a0a12] p-4 md:p-8">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-wider">🐱 Purple Cat</h1>
+        <p className="text-purple-300/60 mt-2 text-sm md:text-base">Control de Inventario — Ropa Gótica</p>
+      </header>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+        <div className="bg-[#1a1a2e] border border-purple-900/50 rounded-xl p-4 text-center">
+          <div className="text-2xl md:text-3xl font-bold text-purple-400">{totalStock}</div>
+          <div className="text-xs text-purple-300/50 mt-1">Prendas en Stock</div>
         </div>
-        {children}
+        <div className="bg-[#1a1a2e] border border-purple-900/50 rounded-xl p-4 text-center">
+          <div className="text-2xl md:text-3xl font-bold text-green-400">${valorTotal.toLocaleString()}</div>
+          <div className="text-xs text-purple-300/50 mt-1">Valor del Inventario</div>
+        </div>
+        <div className="bg-[#1a1a2e] border border-red-900/50 rounded-xl p-4 text-center">
+          <div className="text-2xl md:text-3xl font-bold text-red-400">{agotados}</div>
+          <div className="text-xs text-purple-300/50 mt-1">Agotados</div>
+        </div>
+        <div className="bg-[#1a1a2e] border border-yellow-900/50 rounded-xl p-4 text-center">
+          <div className="text-2xl md:text-3xl font-bold text-yellow-400">{stockBajo}</div>
+          <div className="text-xs text-purple-300/50 mt-1">Stock Bajo</div>
+        </div>
       </div>
+
+      <div className="flex flex-col md:flex-row gap-3 mb-6">
+        <input type="text" placeholder="🔍 Buscar por nombre, SKU o color..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          className="flex-1 bg-[#1a1a2e] border border-purple-900/50 rounded-lg px-4 py-3 text-white placeholder-purple-300/30 focus:border-purple-500 focus:outline-none" />
+        <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
+          className="bg-[#1a1a2e] border border-purple-900/50 rounded-lg px-4 py-3 text-purple-200 focus:border-purple-500 focus:outline-none">
+          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filtroTalla} onChange={e => setFiltroTalla(e.target.value)}
+          className="bg-[#1a1a2e] border border-purple-900/50 rounded-lg px-4 py-3 text-purple-200 focus:border-purple-500 focus:outline-none">
+          {TALLAS.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <button onClick={() => abrirModal()} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
+          + Agregar Prenda
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {filtrados.map(p => (
+          <div key={p.id} className={`bg-[#1a1a2e] border rounded-xl overflow-hidden transition-all hover:scale-[1.02] ${p.stock === 0 ? 'border-red-800 opacity-60' : p.stock < p.stock_minimo ? 'border-yellow-600' : 'border-purple-900/50'}`}>
+            <div className="h-48 bg-[#12121f] flex items-center justify-center overflow-hidden">
+              {p.image_url ? (
+                <img src={p.image_url} alt={p.nombre} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-5xl opacity-20">👗</span>
+              )}
+            </div>
+            <div className="p-4">
+              <div className="flex justify-between items-start mb-1">
+                <h3 className="font-bold text-white text-sm leading-tight">{p.nombre}</h3>
+                {p.stock === 0 && <span className="bg-red-600 text-xs px-2 py-0.5 rounded-full text-white ml-2 shrink-0">Agotado</span>}
+                {p.stock > 0 && p.stock < p.stock_minimo && <span className="bg-yellow-600 text-xs px-2 py-0.5 rounded-full text-white ml-2 shrink-0">Bajo</span>}
+              </div>
+              <p className="text-purple-400/60 text-xs mb-2">{p.sku}</p>
+              <div className="flex gap-2 mb-2 flex-wrap">
+                <span className="bg-purple-900/40 text-purple-300 text-xs px-2 py-0.5 rounded">{p.categoria}</span>
+                <span className="bg-purple-900/40 text-purple-300 text-xs px-2 py-0.5 rounded">T: {p.talla}</span>
+                <span className="bg-purple-900/40 text-purple-300 text-xs px-2 py-0.5 rounded">{p.color}</span>
+              </div>
+              {p.descripcion && <p className="text-purple-300/40 text-xs mb-3 line-clamp-2">{p.descripcion}</p>}
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-green-400 font-bold">${p.precio_venta.toLocaleString()}</span>
+                <span className="text-purple-300/40 text-xs">Costo: ${p.precio_costo.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => cambiarStock(p.id, -1)} className="bg-red-900/60 hover:bg-red-700 text-white w-9 h-9 rounded-lg font-bold text-lg transition-colors">−</button>
+                  <span className={`text-xl font-bold w-10 text-center ${p.stock === 0 ? 'text-red-400' : p.stock < p.stock_minimo ? 'text-yellow-400' : 'text-white'}`}>{p.stock}</span>
+                  <button onClick={() => cambiarStock(p.id, 1)} className="bg-purple-700 hover:bg-purple-600 text-white w-9 h-9 rounded-lg font-bold text-lg transition-colors">+</button>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => abrirModal(p)} className="text-purple-400 hover:text-purple-300 text-sm px-2 py-1">✏️</button>
+                  <button onClick={() => eliminar(p.id)} className="text-red-400 hover:text-red-300 text-sm px-2 py-1">🗑️</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {filtrados.length === 0 && (
+        <div className="text-center py-20 text-purple-400/40">
+          <div className="text-5xl mb-4">🐱</div>
+          <p>No se encontraron prendas</p>
+        </div>
+      )}
+
+      {mostrarModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={cerrarModal}>
+          <div className="bg-[#1a1a2e] border border-purple-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-purple-400 mb-4">{editando ? '✏️ Editar Prenda' : '🐱 Nueva Prenda'}</h2>
+            <div className="mb-4">
+              <label className="text-purple-300/60 text-sm mb-1 block">Foto de la prenda</label>
+              {form.image_url && <img src={form.image_url} alt="Preview" className="w-full h-40 object-cover rounded-lg mb-2 border border-purple-900" />}
+              <input type="file" accept="image/*" onChange={e => { if (e.target.files?.[0]) subirImagen(e.target.files[0]) }}
+                className="w-full text-sm text-purple-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-700 file:text-white file:cursor-pointer" />
+              {subiendoImagen && <p className="text-purple-400 text-xs mt-1 animate-pulse">Subiendo imagen...</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-purple-300/60 text-sm">Nombre *</label>
+                <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" placeholder="Ej: Corset Victoriano" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">SKU</label>
+                <input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" placeholder="COR-VIC-NEG-M" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Categoría</label>
+                <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+                  {CATEGORIAS.filter(c => c !== 'Todas').map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Talla</label>
+                <select value={form.talla} onChange={e => setForm({...form, talla: e.target.value})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+                  {TALLAS.filter(t => t !== 'Todas').map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Color</label>
+                <input value={form.color} onChange={e => setForm({...form, color: e.target.value})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" placeholder="Negro" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Precio Costo</label>
+                <input type="number" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Precio Venta</label>
+                <input type="number" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Stock Inicial</label>
+                <input type="number" value={form.stock} onChange={e => setForm({...form, stock: Number(e.target.value)})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-purple-300/60 text-sm">Stock Mínimo</label>
+                <input type="number" value={form.stock_minimo} onChange={e => setForm({...form, stock_minimo: Number(e.target.value)})}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-purple-300/60 text-sm">Descripción</label>
+                <textarea value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} rows={3}
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none resize-none" placeholder="Ej: Corset de terciopelo con cintas de satén..." />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={guardar} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition-colors">
+                {editando ? 'Guardar Cambios' : 'Agregar Prenda'}
+              </button>
+              <button onClick={cerrarModal} className="px-6 bg-[#0a0a12] border border-purple-900/50 text-purple-300 py-3 rounded-lg hover:border-purple-500 transition-colors">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
