@@ -1,7 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+// Conexión directa a Supabase
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabase = createClient(supabaseUrl, supabaseKey)
 
 interface Producto {
   id: number
@@ -39,21 +44,30 @@ export default function Home() {
   })
 
   const cargarProductos = async () => {
-    const { data } = await supabase.from('productos').select('*').order('created_at', { ascending: false })
-    if (data) setProductos(data)
-    setLoading(false)
+    try {
+      const { data } = await supabase.from('productos').select('*').order('created_at', { ascending: false })
+      if (data) setProductos(data)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { cargarProductos() }, [])
 
   const subirImagen = async (file: File) => {
     setSubiendoImagen(true)
-    const ext = file.name.split('.').pop()
-    const nombre = `${Date.now()}.${ext}`
-    const { data } = await supabase.storage.from('product-images').upload(nombre, file)
-    if (data) {
-      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(nombre)
-      setForm(prev => ({ ...prev, image_url: urlData.publicUrl }))
+    try {
+      const ext = file.name.split('.').pop()
+      const nombre = `${Date.now()}.${ext}`
+      const { data } = await supabase.storage.from('product-images').upload(nombre, file)
+      if (data) {
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(nombre)
+        setForm(prev => ({ ...prev, image_url: urlData.publicUrl }))
+      }
+    } catch (e) {
+      alert('Error subiendo imagen')
     }
     setSubiendoImagen(false)
   }
@@ -88,11 +102,11 @@ export default function Home() {
     if (prod) {
       setEditando(prod)
       setForm({
-        sku: prod.sku, nombre: prod.nombre, categoria: prod.categoria,
-        talla: prod.talla, color: prod.color, precio_costo: prod.precio_costo,
-        precio_venta: prod.precio_venta, stock: prod.stock,
-        stock_minimo: prod.stock_minimo, descripcion: prod.descripcion,
-        image_url: prod.image_url
+        sku: prod.sku || '', nombre: prod.nombre || '', categoria: prod.categoria || 'Corsets',
+        talla: prod.talla || 'M', color: prod.color || 'Negro', precio_costo: prod.precio_costo || 0,
+        precio_venta: prod.precio_venta || 0, stock: prod.stock || 0,
+        stock_minimo: prod.stock_minimo || 3, descripcion: prod.descripcion || '',
+        image_url: prod.image_url || ''
       })
     } else {
       setEditando(null)
@@ -108,27 +122,27 @@ export default function Home() {
   const cerrarModal = () => { setMostrarModal(false); setEditando(null) }
 
   const filtrados = productos.filter(p => {
-    const matchB = p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      p.sku.toLowerCase().includes(busqueda.toLowerCase()) ||
-      p.color.toLowerCase().includes(busqueda.toLowerCase())
+    const matchB = (p.nombre || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.sku || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.color || '').toLowerCase().includes(busqueda.toLowerCase())
     const matchC = filtroCategoria === 'Todas' || p.categoria === filtroCategoria
     const matchT = filtroTalla === 'Todas' || p.talla === filtroTalla
     return matchB && matchC && matchT
   })
 
-  const totalStock = productos.reduce((s, p) => s + p.stock, 0)
-  const valorTotal = productos.reduce((s, p) => s + p.stock * p.precio_venta, 0)
+  const totalStock = productos.reduce((s, p) => s + (p.stock || 0), 0)
+  const valorTotal = productos.reduce((s, p) => s + ((p.stock || 0) * (p.precio_venta || 0)), 0)
   const agotados = productos.filter(p => p.stock === 0).length
-  const stockBajo = productos.filter(p => p.stock > 0 && p.stock < p.stock_minimo).length
+  const stockBajo = productos.filter(p => p.stock > 0 && p.stock < (p.stock_minimo || 3)).length
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-[#0a0a12]">
       <div className="text-purple-400 text-xl animate-pulse">🐱 Cargando Purple Cat...</div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-[#0a0a12] p-4 md:p-8">
+    <div className="min-h-screen bg-[#0a0a12] p-4 md:p-8 text-[#e2d9f3]">
       <header className="text-center mb-8">
         <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-wider">🐱 Purple Cat</h1>
         <p className="text-purple-300/60 mt-2 text-sm md:text-base">Control de Inventario — Ropa Gótica</p>
@@ -171,7 +185,7 @@ export default function Home() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtrados.map(p => (
-          <div key={p.id} className={`bg-[#1a1a2e] border rounded-xl overflow-hidden transition-all hover:scale-[1.02] ${p.stock === 0 ? 'border-red-800 opacity-60' : p.stock < p.stock_minimo ? 'border-yellow-600' : 'border-purple-900/50'}`}>
+          <div key={p.id} className={`bg-[#1a1a2e] border rounded-xl overflow-hidden transition-all hover:scale-[1.02] ${p.stock === 0 ? 'border-red-800 opacity-60' : p.stock < (p.stock_minimo || 3) ? 'border-yellow-600' : 'border-purple-900/50'}`}>
             <div className="h-48 bg-[#12121f] flex items-center justify-center overflow-hidden">
               {p.image_url ? (
                 <img src={p.image_url} alt={p.nombre} className="w-full h-full object-cover" />
@@ -183,7 +197,7 @@ export default function Home() {
               <div className="flex justify-between items-start mb-1">
                 <h3 className="font-bold text-white text-sm leading-tight">{p.nombre}</h3>
                 {p.stock === 0 && <span className="bg-red-600 text-xs px-2 py-0.5 rounded-full text-white ml-2 shrink-0">Agotado</span>}
-                {p.stock > 0 && p.stock < p.stock_minimo && <span className="bg-yellow-600 text-xs px-2 py-0.5 rounded-full text-white ml-2 shrink-0">Bajo</span>}
+                {p.stock > 0 && p.stock < (p.stock_minimo || 3) && <span className="bg-yellow-600 text-xs px-2 py-0.5 rounded-full text-white ml-2 shrink-0">Bajo</span>}
               </div>
               <p className="text-purple-400/60 text-xs mb-2">{p.sku}</p>
               <div className="flex gap-2 mb-2 flex-wrap">
@@ -193,13 +207,13 @@ export default function Home() {
               </div>
               {p.descripcion && <p className="text-purple-300/40 text-xs mb-3 line-clamp-2">{p.descripcion}</p>}
               <div className="flex justify-between items-center mb-3">
-                <span className="text-green-400 font-bold">${p.precio_venta.toLocaleString()}</span>
-                <span className="text-purple-300/40 text-xs">Costo: ${p.precio_costo.toLocaleString()}</span>
+                <span className="text-green-400 font-bold">${(p.precio_venta || 0).toLocaleString()}</span>
+                <span className="text-purple-300/40 text-xs">Costo: ${(p.precio_costo || 0).toLocaleString()}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button onClick={() => cambiarStock(p.id, -1)} className="bg-red-900/60 hover:bg-red-700 text-white w-9 h-9 rounded-lg font-bold text-lg transition-colors">−</button>
-                  <span className={`text-xl font-bold w-10 text-center ${p.stock === 0 ? 'text-red-400' : p.stock < p.stock_minimo ? 'text-yellow-400' : 'text-white'}`}>{p.stock}</span>
+                  <span className={`text-xl font-bold w-10 text-center ${p.stock === 0 ? 'text-red-400' : p.stock < (p.stock_minimo || 3) ? 'text-yellow-400' : 'text-white'}`}>{p.stock}</span>
                   <button onClick={() => cambiarStock(p.id, 1)} className="bg-purple-700 hover:bg-purple-600 text-white w-9 h-9 rounded-lg font-bold text-lg transition-colors">+</button>
                 </div>
                 <div className="flex gap-1">
@@ -283,7 +297,7 @@ export default function Home() {
               <div className="col-span-2">
                 <label className="text-purple-300/60 text-sm">Descripción</label>
                 <textarea value={form.descripcion} onChange={e => setForm({...form, descripcion: e.target.value})} rows={3}
-                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none resize-none" placeholder="Ej: Corset de terciopelo con cintas de satén..." />
+                  className="w-full bg-[#0a0a12] border border-purple-900/50 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none resize-none" placeholder="Ej: Corset de terciopelo..." />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
