@@ -21,6 +21,7 @@ interface Producto {
   stock_minimo: number;
   descripcion: string;
   image_url: string;
+  imagenes?: string[];
 }
 
 export default function InventarioPurpleCat() {
@@ -30,9 +31,17 @@ export default function InventarioPurpleCat() {
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
   const [tallaFiltro, setTallaFiltro] = useState('Todas');
   
-  // Modal State
+  // Modal Edit State
   const [modalAbierto, setModalAbierto] = useState(false);
-  const [productoEditando, setProductoEditando] = useState<Partial<Producto> | null>(null);
+  const [productoEditando, setProductoEditando] = useState<Partial<Producto> & { imagenesTexto?: string } | null>(null);
+
+  // Visor / Galería de fotos State
+  const [visorImagenes, setVisorImagenes] = useState<{ abierto: boolean; lista: string[]; indice: number; titulo: string }>({
+    abierto: false,
+    lista: [],
+    indice: 0,
+    titulo: ''
+  });
 
   useEffect(() => {
     fetchProductos();
@@ -61,7 +70,6 @@ export default function InventarioPurpleCat() {
 
     const nuevoStock = Math.max(0, prod.stock + delta);
     
-    // Optimistic UI update
     setProductos(prev => prev.map(p => p.id === id ? { ...p, stock: nuevoStock } : p));
 
     const { error } = await supabase
@@ -71,7 +79,7 @@ export default function InventarioPurpleCat() {
 
     if (error) {
       console.error("Error al actualizar stock:", error.message);
-      fetchProductos(); // Revert back on error
+      fetchProductos();
     }
   }
 
@@ -79,23 +87,41 @@ export default function InventarioPurpleCat() {
     e.preventDefault();
     if (!productoEditando) return;
 
+    // Convertir el texto de URLs separadas por línea en un arreglo de strings
+    const listaImagenes = productoEditando.imagenesTexto
+      ? productoEditando.imagenesTexto.split('\n').map(u => u.trim()).filter(u => u.length > 0)
+      : (productoEditando.imagenes || []);
+
+    const mainImage = productoEditando.image_url || listaImagenes[0] || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg';
+
+    // Asegurarnos de que la principal esté en la lista
+    if (mainImage && !listaImagenes.includes(mainImage)) {
+      listaImagenes.unshift(mainImage);
+    }
+
+    const payload = {
+      sku: productoEditando.sku,
+      nombre: productoEditando.nombre,
+      categoria: productoEditando.categoria,
+      talla: productoEditando.talla,
+      color: productoEditando.color,
+      precio_costo: productoEditando.precio_costo,
+      precio_venta: productoEditando.precio_venta,
+      stock: productoEditando.stock,
+      stock_minimo: productoEditando.stock_minimo,
+      descripcion: productoEditando.descripcion,
+      image_url: mainImage,
+      imagenes: listaImagenes
+    };
+
     if (productoEditando.id) {
-      // Editar existente
-      const { error } = await supabase
-        .from('productos')
-        .update(productoEditando)
-        .eq('id', productoEditando.id);
-      
+      const { error } = await supabase.from('productos').update(payload).eq('id', productoEditando.id);
       if (!error) {
         setModalAbierto(false);
         fetchProductos();
       }
     } else {
-      // Crear nuevo
-      const { error } = await supabase
-        .from('productos')
-        .insert([productoEditando]);
-
+      const { error } = await supabase.from('productos').insert([payload]);
       if (!error) {
         setModalAbierto(false);
         fetchProductos();
@@ -107,6 +133,24 @@ export default function InventarioPurpleCat() {
     if (!confirm("¿Seguro que deseas eliminar este producto gótico?")) return;
     const { error } = await supabase.from('productos').delete().eq('id', id);
     if (!error) fetchProductos();
+  }
+
+  function abrirVisor(prod: Producto) {
+    // Combinar la foto principal con la lista de fotos secundarias
+    let todas = [prod.image_url];
+    if (prod.imagenes && Array.isArray(prod.imagenes)) {
+      prod.imagenes.forEach(img => {
+        if (img && !todas.includes(img)) todas.push(img);
+      });
+    }
+    todas = todas.filter(Boolean);
+
+    setVisorImagenes({
+      abierto: true,
+      lista: todas,
+      indice: 0,
+      titulo: prod.nombre
+    });
   }
 
   // Filtrado
@@ -143,7 +187,6 @@ export default function InventarioPurpleCat() {
 
       {/* Barra de Herramientas: Búsqueda, Filtros y Nuevo Producto */}
       <div className="max-w-7xl mx-auto mb-8 bg-[#161625]/80 border border-violet-900/30 p-4 rounded-xl shadow-2xl backdrop-blur-md flex flex-col md:flex-row gap-4 justify-between items-center">
-        {/* Buscador */}
         <div className="w-full md:w-1/3">
           <input 
             type="text" 
@@ -154,7 +197,6 @@ export default function InventarioPurpleCat() {
           />
         </div>
 
-        {/* Filtros */}
         <div className="flex w-full md:w-auto gap-3">
           <select 
             value={categoriaFiltro} 
@@ -176,7 +218,6 @@ export default function InventarioPurpleCat() {
             ))}
           </select>
 
-          {/* Botón Añadir */}
           <button 
             onClick={() => {
               setProductoEditando({
@@ -190,7 +231,8 @@ export default function InventarioPurpleCat() {
                 stock: 0,
                 stock_minimo: 3,
                 descripcion: '',
-                image_url: 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg'
+                image_url: 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg',
+                imagenesTexto: ''
               });
               setModalAbierto(true);
             }}
@@ -201,18 +243,19 @@ export default function InventarioPurpleCat() {
         </div>
       </div>
 
-      {/* Indicador de Carga */}
       {cargando ? (
         <div className="text-center py-20">
           <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-violet-500 mb-4"></div>
           <p className="text-violet-400 font-serif tracking-widest animate-pulse">Invocando inventario...</p>
         </div>
       ) : (
-        /* Grid de Productos */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
           {productosFiltrados.map((prod) => {
             const stockBajo = prod.stock <= prod.stock_minimo && prod.stock > 0;
             const agotado = prod.stock === 0;
+            const totalFotos = (prod.imagenes?.length && prod.imagenes.length > 0) 
+              ? prod.imagenes.length 
+              : 1;
 
             return (
               <div 
@@ -239,15 +282,24 @@ export default function InventarioPurpleCat() {
                   )}
                 </div>
 
-                {/* Imagen del Producto */}
-                <div className="h-52 overflow-hidden bg-black/60 relative flex items-center justify-center group-hover:bg-black/40 transition-colors">
+                {/* Contenedor Imagen Referencial (Haz Clic para Ver Galería) */}
+                <div 
+                  onClick={() => abrirVisor(prod)}
+                  className="h-52 overflow-hidden bg-black/60 relative cursor-pointer group/img"
+                  title="Haz clic para abrir la galería de fotos de este producto"
+                >
                   <img 
                     src={prod.image_url || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg'} 
                     alt={prod.nombre}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+                    className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500 opacity-90 group-hover/img:opacity-100"
                   />
                   <span className="absolute bottom-2 left-2 bg-black/80 text-violet-300 text-[10px] px-2 py-0.5 rounded border border-violet-900/40 font-mono">
                     {prod.sku}
+                  </span>
+
+                  {/* Icono indicador de Galería de Fotos */}
+                  <span className="absolute bottom-2 right-2 bg-violet-950/90 text-violet-200 text-[10px] px-2 py-0.5 rounded border border-violet-700/50 flex items-center gap-1 backdrop-blur-sm group-hover/img:bg-violet-800 transition-colors">
+                    🖼️ {totalFotos} {totalFotos === 1 ? 'foto' : 'fotos'}
                   </span>
                 </div>
 
@@ -260,7 +312,10 @@ export default function InventarioPurpleCat() {
                       </h2>
                       <button 
                         onClick={() => {
-                          setProductoEditando(prod);
+                          const imgsTexto = (prod.imagenes && prod.imagenes.length > 0)
+                            ? prod.imagenes.join('\n')
+                            : prod.image_url;
+                          setProductoEditando({ ...prod, imagenesTexto: imgsTexto });
                           setModalAbierto(true);
                         }}
                         className="text-gray-500 hover:text-violet-400 p-1 text-sm transition-colors"
@@ -283,7 +338,6 @@ export default function InventarioPurpleCat() {
                     )}
                   </div>
 
-                  {/* Precios y Stock Controles */}
                   <div>
                     <div className="flex justify-between items-baseline mb-3 pt-2 border-t border-violet-900/20">
                       <div>
@@ -293,7 +347,6 @@ export default function InventarioPurpleCat() {
                       </div>
                     </div>
 
-                    {/* Quick Stock Bar */}
                     <div className="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-violet-900/30">
                       <span className="text-xs text-violet-300/70 font-mono uppercase pl-1">Stock</span>
                       <div className="flex items-center gap-2">
@@ -324,7 +377,78 @@ export default function InventarioPurpleCat() {
         </div>
       )}
 
-      {/* MODAL PARA AÑADIR / EDITAR */}
+      {/* --- MODAL VISOR DE FOTOS / GALERÍA --- */}
+      {visorImagenes.abierto && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-between p-4 md:p-8 animate-fadeIn">
+          {/* Header Visor */}
+          <div className="w-full max-w-4xl flex justify-between items-center text-violet-300 border-b border-violet-900/40 pb-4">
+            <div>
+              <h3 className="text-xl font-serif text-violet-400">{visorImagenes.titulo}</h3>
+              <p className="text-xs text-gray-400">
+                Imagen {visorImagenes.indice + 1} de {visorImagenes.lista.length}
+              </p>
+            </div>
+            <button 
+              onClick={() => setVisorImagenes({ ...visorImagenes, abierto: false })}
+              className="text-2xl text-gray-400 hover:text-violet-400 transition-colors p-2"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Imagen Principal Grande con Flechas */}
+          <div className="relative w-full max-w-4xl flex-grow flex items-center justify-center my-4 overflow-hidden">
+            {visorImagenes.lista.length > 1 && (
+              <button 
+                onClick={() => setVisorImagenes(prev => ({
+                  ...prev,
+                  indice: (prev.indice - 1 + prev.lista.length) % prev.lista.length
+                }))}
+                className="absolute left-2 z-10 bg-black/70 hover:bg-violet-900/80 text-white p-3 rounded-full border border-violet-700/50 transition-colors"
+              >
+                ◀
+              </button>
+            )}
+
+            <img 
+              src={visorImagenes.lista[visorImagenes.indice]} 
+              alt="Vista ampliada"
+              className="max-h-[70vh] max-w-full object-contain rounded-lg border border-violet-900/40 shadow-[0_0_30px_rgba(139,92,246,0.2)]"
+            />
+
+            {visorImagenes.lista.length > 1 && (
+              <button 
+                onClick={() => setVisorImagenes(prev => ({
+                  ...prev,
+                  indice: (prev.indice + 1) % prev.lista.length
+                }))}
+                className="absolute right-2 z-10 bg-black/70 hover:bg-violet-900/80 text-white p-3 rounded-full border border-violet-700/50 transition-colors"
+              >
+                ▶
+              </button>
+            )}
+          </div>
+
+          {/* Miniaturas al Pie */}
+          {visorImagenes.lista.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto max-w-4xl p-2 border-t border-violet-900/30 w-full justify-center">
+              {visorImagenes.lista.map((url, i) => (
+                <img 
+                  key={i}
+                  src={url}
+                  alt={`Thumb ${i}`}
+                  onClick={() => setVisorImagenes(prev => ({ ...prev, indice: i }))}
+                  className={`w-14 h-14 object-cover rounded cursor-pointer border-2 transition-all ${
+                    i === visorImagenes.indice ? 'border-violet-500 scale-105 shadow-[0_0_10px_rgba(139,92,246,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- MODAL PARA EDITAR / UNIFICAR FOTOS --- */}
       {modalAbierto && productoEditando && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)] max-h-[90vh] overflow-y-auto">
@@ -441,11 +565,14 @@ export default function InventarioPurpleCat() {
               </div>
 
               <div>
-                <label className="text-xs text-violet-300 block mb-1">URL Imagen Supabase</label>
-                <input 
-                  type="text" 
-                  value={productoEditando.image_url || ''} 
-                  onChange={e => setProductoEditando({...productoEditando, image_url: e.target.value})}
+                <label className="text-xs text-violet-300 block mb-1">
+                  Enlaces de Fotos (Pon una URL por línea para añadir varias fotos al producto):
+                </label>
+                <textarea 
+                  rows={4}
+                  value={productoEditando.imagenesTexto || ''} 
+                  onChange={e => setProductoEditando({...productoEditando, imagenesTexto: e.target.value})}
+                  placeholder="https://.../foto1.jpg&#10;https://.../foto2.jpg"
                   className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-xs"
                 />
               </div>
