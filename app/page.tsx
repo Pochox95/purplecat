@@ -53,9 +53,11 @@ export default function InventarioPurpleCat() {
   const [calcFlete, setCalcFlete] = useState<number>(1.50);
   const [calcMargen, setCalcMargen] = useState<number>(50); // % Ganancia
 
+  // Feedback Copiado
+  const [mensajeCopiado, setMensajeCopiado] = useState<string | null>(null);
+
   useEffect(() => {
     fetchProductos();
-    // Cargar tasas desde localStorage si existen
     const bcvGuardada = localStorage.getItem('purplecat_bcv');
     const paraleloGuardada = localStorage.getItem('purplecat_paralelo');
     if (bcvGuardada) setTasaBCV(parseFloat(bcvGuardada));
@@ -175,12 +177,23 @@ export default function InventarioPurpleCat() {
     });
   }
 
+  function copiarPrecioCliente(nombre: string, usdEfectivo: number) {
+    const totalBs = usdEfectivo * tasaParalelo;
+    const usdBcv = tasaBCV > 0 ? totalBs / tasaBCV : usdEfectivo;
+    
+    const texto = `Purple Cat 🐾 - ${nombre}:\n• $${usdEfectivo.toFixed(2)} en Efectivo\n• $${usdBcv.toFixed(2)} en Bs a Tasa BCV (${totalBs.toFixed(2)} Bs)`;
+    
+    navigator.clipboard.writeText(texto);
+    setMensajeCopiado(`¡Copiado precio de ${nombre}!`);
+    setTimeout(() => setMensajeCopiado(null), 3000);
+  }
+
   // Cálculos para la Calculadora de Precios
   const costoTotalBase = (Number(calcCosto) || 0) + (Number(calcFlete) || 0);
-  const precioVentaSugeridoUSD = costoTotalBase * (1 + (Number(calcMargen) || 0) / 100);
-  const gananciaNetaUSD = precioVentaSugeridoUSD - costoTotalBase;
-  const precioBsBCV = precioVentaSugeridoUSD * tasaBCV;
-  const precioBsParalelo = precioVentaSugeridoUSD * tasaParalelo;
+  const precioEfectivoUSD = costoTotalBase * (1 + (Number(calcMargen) || 0) / 100);
+  const totalBsRequeridos = precioEfectivoUSD * tasaParalelo;
+  const precioBCVUSD = tasaBCV > 0 ? totalBsRequeridos / tasaBCV : precioEfectivoUSD;
+  const gananciaNetaUSD = precioEfectivoUSD - costoTotalBase;
 
   // Filtrado
   const categoriasUnicas = ['Todas', ...Array.from(new Set(productos.map(p => p.categoria)))];
@@ -196,6 +209,13 @@ export default function InventarioPurpleCat() {
 
   return (
     <div className="min-h-screen bg-[#0a0a12] text-gray-200 p-4 md:p-8 font-sans selection:bg-violet-900 selection:text-white">
+      {/* Notificación Flotante de Copiado */}
+      {mensajeCopiado && (
+        <div className="fixed top-4 right-4 z-50 bg-violet-900 text-white px-4 py-2 rounded-lg border border-violet-500 shadow-2xl animate-bounce text-xs font-mono font-bold">
+          {mensajeCopiado}
+        </div>
+      )}
+
       {/* Header Gótico con Logo Central */}
       <header className="flex flex-col items-center mb-6 border-b border-violet-950/60 pb-6">
         <div className="relative group">
@@ -215,16 +235,15 @@ export default function InventarioPurpleCat() {
       </header>
 
       {/* BARRA DE TASAS DE CAMBIO (VENEZUELA) */}
-      <div className="max-w-7xl mx-auto mb-6 bg-gradient-to-r from-[#161625] via-[#1c1b33] to-[#161625] border border-violet-800/40 p-3 rounded-xl shadow-xl flex flex-wrap items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto mb-6 bg-gradient-to-r from-[#161625] via-[#1c1b33] to-[#161625] border border-violet-800/40 p-3.5 rounded-xl shadow-xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <span className="text-lg">🇻🇪</span>
           <span className="text-xs font-bold text-violet-300 uppercase tracking-wider font-mono">Tasas de Cambio:</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          {/* Tasa BCV */}
           <div className="flex items-center gap-2 bg-[#0a0a12] px-3 py-1.5 rounded-lg border border-violet-900/50">
-            <label className="text-xs text-blue-400 font-semibold font-mono">BCV (Bs/$):</label>
+            <label className="text-xs text-blue-400 font-semibold font-mono">BCV (Bs):</label>
             <input 
               type="number" 
               step="0.01"
@@ -234,9 +253,8 @@ export default function InventarioPurpleCat() {
             />
           </div>
 
-          {/* Tasa Paralelo */}
           <div className="flex items-center gap-2 bg-[#0a0a12] px-3 py-1.5 rounded-lg border border-violet-900/50">
-            <label className="text-xs text-purple-400 font-semibold font-mono">Paralelo (Bs/$):</label>
+            <label className="text-xs text-purple-400 font-semibold font-mono">Paralelo (Bs):</label>
             <input 
               type="number" 
               step="0.01"
@@ -246,7 +264,6 @@ export default function InventarioPurpleCat() {
             />
           </div>
 
-          {/* Botón Abrir Calculadora */}
           <button
             onClick={() => setModalCalcAbierto(true)}
             className="bg-violet-900/60 hover:bg-violet-700 text-violet-200 border border-violet-500/50 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
@@ -328,10 +345,10 @@ export default function InventarioPurpleCat() {
               ? prod.imagenes.length 
               : 1;
 
-            const ventaUSD = Number(prod.precio_venta || 0);
+            const usdEfectivo = Number(prod.precio_venta || 0);
             const costoUSD = Number(prod.precio_costo || 0);
-            const ventaBsBCV = (ventaUSD * tasaBCV).toFixed(2);
-            const ventaBsParalelo = (ventaUSD * tasaParalelo).toFixed(2);
+            const totalBsRequeridos = usdEfectivo * tasaParalelo;
+            const usdBcvEquivalente = tasaBCV > 0 ? totalBsRequeridos / tasaBCV : usdEfectivo;
 
             return (
               <div 
@@ -414,24 +431,37 @@ export default function InventarioPurpleCat() {
                   </div>
 
                   <div>
-                    {/* Precios con Decimales y Conversión a Bolívares */}
-                    <div className="bg-black/40 p-2.5 rounded-lg border border-violet-900/20 mb-3 space-y-1">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-[10px] text-gray-500 uppercase">Costo:</span>
-                        <span className="text-xs text-gray-400 font-mono">${costoUSD.toFixed(2)}</span>
+                    {/* CUADRO DE PRECIOS DOBLE: EFECTIVO VS BCV */}
+                    <div className="bg-black/40 p-2.5 rounded-lg border border-violet-900/20 mb-3 space-y-2">
+                      <div className="flex justify-between items-baseline text-[10px] text-gray-500">
+                        <span>Costo Invertido:</span>
+                        <span className="font-mono text-gray-400">${costoUSD.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between items-baseline pt-1 border-t border-violet-900/30">
-                        <span className="text-xs font-bold text-violet-300">Venta ($):</span>
-                        <span className="text-lg font-bold text-emerald-400 font-mono">${ventaUSD.toFixed(2)}</span>
+
+                      {/* Opción 1: En Efectivo */}
+                      <div className="flex justify-between items-center pt-1 border-t border-violet-900/30">
+                        <span className="text-xs font-bold text-emerald-400">💵 En Efectivo:</span>
+                        <span className="text-base font-bold text-emerald-400 font-mono">${usdEfectivo.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between items-center text-[11px] pt-1 text-gray-400 font-mono">
-                        <span className="text-blue-400/90">Bs (BCV):</span>
-                        <span>Bs {ventaBsBCV}</span>
+
+                      {/* Opción 2: En Bs a Tasa BCV */}
+                      <div className="bg-violet-950/30 p-1.5 rounded border border-violet-800/30 space-y-0.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-blue-300 font-semibold">💳 En Bs a BCV:</span>
+                          <span className="font-mono font-bold text-violet-200">${usdBcvEquivalente.toFixed(2)}</span>
+                        </div>
+                        <div className="text-right text-[10px] text-gray-400 font-mono">
+                          = Bs {totalBsRequeridos.toFixed(2)}
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-[11px] text-gray-400 font-mono">
-                        <span className="text-purple-400/90">Bs (Paralelo):</span>
-                        <span>Bs {ventaBsParalelo}</span>
-                      </div>
+
+                      {/* Botón Copiar Oferta para Cliente */}
+                      <button
+                        onClick={() => copiarPrecioCliente(prod.nombre, usdEfectivo)}
+                        className="w-full text-center text-[10px] bg-violet-900/30 hover:bg-violet-800/60 text-violet-300 py-1 rounded border border-violet-700/40 transition-colors font-mono"
+                      >
+                        📋 Copiar Precio para Cliente
+                      </button>
                     </div>
 
                     {/* Controles de Stock */}
@@ -471,7 +501,7 @@ export default function InventarioPurpleCat() {
           <div className="bg-[#161625] border border-violet-600/50 rounded-2xl p-6 max-w-lg w-full shadow-[0_0_50px_rgba(139,92,246,0.3)]">
             <div className="flex justify-between items-center mb-5 border-b border-violet-900/40 pb-3">
               <h3 className="text-xl font-serif text-violet-400 flex items-center gap-2">
-                🧮 Calculadora de Precios & Márgenes
+                🧮 Calculadora de Precios Efectivo vs BCV
               </h3>
               <button 
                 onClick={() => setModalCalcAbierto(false)}
@@ -494,7 +524,7 @@ export default function InventarioPurpleCat() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-violet-300 block mb-1">Envío/Flete ($)</label>
+                  <label className="text-[11px] text-violet-300 block mb-1">Flete/Envío ($)</label>
                   <input 
                     type="number" 
                     step="0.01"
@@ -515,37 +545,36 @@ export default function InventarioPurpleCat() {
                 </div>
               </div>
 
-              {/* Resultados en vivo */}
+              {/* Resultados de la Calculadora */}
               <div className="bg-[#0a0a12] p-4 rounded-xl border border-violet-800/40 space-y-3 mt-4">
                 <div className="flex justify-between items-center text-xs text-gray-400 border-b border-violet-900/30 pb-2">
                   <span>Costo Total Invertido:</span>
                   <span className="font-mono text-white font-bold">${costoTotalBase.toFixed(2)}</span>
                 </div>
 
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-bold text-emerald-400">Precio Sugerido Venta ($):</span>
-                  <span className="font-mono text-2xl font-bold text-emerald-400">${precioVentaSugeridoUSD.toFixed(2)}</span>
+                {/* Opción Efectivo */}
+                <div className="flex justify-between items-center bg-emerald-950/20 p-2 rounded border border-emerald-800/30">
+                  <span className="font-bold text-emerald-400">💵 Precio en Efectivo ($):</span>
+                  <span className="font-mono text-xl font-bold text-emerald-400">${precioEfectivoUSD.toFixed(2)}</span>
                 </div>
 
-                <div className="flex justify-between items-center text-xs text-emerald-300/80">
+                {/* Opción BCV Ajustado */}
+                <div className="flex justify-between items-center bg-violet-950/30 p-2 rounded border border-violet-800/40">
+                  <div>
+                    <span className="font-bold text-violet-300 block">💳 Precio en Bs a BCV:</span>
+                    <span className="text-[10px] text-gray-400 font-mono">(= Bs {totalBsRequeridos.toFixed(2)})</span>
+                  </div>
+                  <span className="font-mono text-xl font-bold text-violet-200">${precioBCVUSD.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs text-emerald-300/80 pt-1">
                   <span>Ganancia Neta ($):</span>
                   <span className="font-mono font-semibold">+${gananciaNetaUSD.toFixed(2)}</span>
-                </div>
-
-                <div className="pt-3 border-t border-violet-900/40 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-blue-400 font-mono">Cobro en Bs (Tasa BCV {tasaBCV}):</span>
-                    <span className="font-mono font-bold text-white">Bs {precioBsBCV.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-purple-400 font-mono">Cobro en Bs (Paralelo {tasaParalelo}):</span>
-                    <span className="font-mono font-bold text-white">Bs {precioBsParalelo.toFixed(2)}</span>
-                  </div>
                 </div>
               </div>
 
               <p className="text-[11px] text-gray-500 italic text-center">
-                * Las tasas se sincronizan en tiempo real con la barra superior.
+                * Si cobras ${precioBCVUSD.toFixed(2)} a Tasa BCV ({tasaBCV}), recibes Bs {totalBsRequeridos.toFixed(2)}, conservando exactamente tu ganancia equivalente a ${precioEfectivoUSD.toFixed(2)} en efectivo.
               </p>
             </div>
           </div>
@@ -705,7 +734,7 @@ export default function InventarioPurpleCat() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">Precio Venta ($)</label>
+                  <label className="text-xs text-violet-300 block mb-1">Precio Venta Efectivo ($)</label>
                   <input 
                     type="number" 
                     step="0.01"
