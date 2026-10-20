@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Conexión directa a Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
@@ -36,6 +35,8 @@ export default function Home() {
   const [mostrarModal, setMostrarModal] = useState(false)
   const [editando, setEditando] = useState<Producto | null>(null)
   const [subiendoImagen, setSubiendoImagen] = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string>('')
+  const [subiendoLogo, setSubiendoLogo] = useState(false)
 
   const [form, setForm] = useState({
     sku: '', nombre: '', categoria: 'Corsets', talla: 'M', color: 'Negro',
@@ -54,7 +55,29 @@ export default function Home() {
     }
   }
 
-  useEffect(() => { cargarProductos() }, [])
+  useEffect(() => {
+    cargarProductos()
+    const savedLogo = localStorage.getItem('purplecat_logo')
+    if (savedLogo) setLogoUrl(savedLogo)
+  }, [])
+
+  const subirLogo = async (file: File) => {
+    setSubiendoLogo(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const nombre = `logo-${Date.now()}.${ext}`
+      const { data } = await supabase.storage.from('product-images').upload(nombre, file)
+      if (data) {
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(nombre)
+        const newUrl = urlData.publicUrl
+        setLogoUrl(newUrl)
+        localStorage.setItem('purplecat_logo', newUrl)
+      }
+    } catch (e) {
+      alert('Error subiendo el logo')
+    }
+    setSubiendoLogo(false)
+  }
 
   const subirImagen = async (file: File) => {
     setSubiendoImagen(true)
@@ -143,9 +166,25 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0a12] p-4 md:p-8 text-[#e2d9f3]">
-      <header className="text-center mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-wider">🐱 Purple Cat</h1>
-        <p className="text-purple-300/60 mt-2 text-sm md:text-base">Control de Inventario — Ropa Gótica</p>
+      <header className="flex flex-col items-center justify-center mb-8 gap-3">
+        <div className="relative group">
+          {logoUrl ? (
+            <img src={logoUrl} alt="Purple Cat Logo" className="h-24 md:h-32 object-contain rounded-2xl border-2 border-purple-800 shadow-[0_0_20px_rgba(124,58,237,0.3)] mb-2" />
+          ) : (
+            <div className="w-24 h-24 md:w-28 md:h-28 rounded-2xl bg-[#1a1a2e] border-2 border-dashed border-purple-700/50 flex flex-col items-center justify-center text-purple-400 mb-2">
+              <span className="text-4xl">🐱</span>
+              <span className="text-[10px] mt-1 text-purple-300/60">Sin Logo</span>
+            </div>
+          )}
+          <label className="cursor-pointer bg-purple-900/80 hover:bg-purple-700 text-purple-200 text-xs px-3 py-1 rounded-full border border-purple-500/40 transition-all block text-center">
+            {subiendoLogo ? 'Cargando...' : logoUrl ? '📷 Cambiar Logo' : '📷 Cargar Logo'}
+            <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files?.[0]) subirLogo(e.target.files[0]) }} />
+          </label>
+        </div>
+        <div className="text-center">
+          <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-wider">Purple Cat</h1>
+          <p className="text-purple-300/60 mt-1 text-sm md:text-base">Control de Inventario — Ropa Gótica</p>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
