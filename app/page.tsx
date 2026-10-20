@@ -31,6 +31,10 @@ export default function InventarioPurpleCat() {
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
   const [tallaFiltro, setTallaFiltro] = useState('Todas');
   
+  // Tasas de cambio Venezuela (Guardadas en el navegador)
+  const [tasaBCV, setTasaBCV] = useState<number>(36.50);
+  const [tasaParalelo, setTasaParalelo] = useState<number>(40.00);
+
   // Modal Edit State
   const [modalAbierto, setModalAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<Partial<Producto> & { imagenesTexto?: string } | null>(null);
@@ -43,9 +47,30 @@ export default function InventarioPurpleCat() {
     titulo: ''
   });
 
+  // Modal Calculadora de Precios State
+  const [modalCalcAbierto, setModalCalcAbierto] = useState(false);
+  const [calcCosto, setCalcCosto] = useState<number>(10.00);
+  const [calcFlete, setCalcFlete] = useState<number>(1.50);
+  const [calcMargen, setCalcMargen] = useState<number>(50); // % Ganancia
+
   useEffect(() => {
     fetchProductos();
+    // Cargar tasas desde localStorage si existen
+    const bcvGuardada = localStorage.getItem('purplecat_bcv');
+    const paraleloGuardada = localStorage.getItem('purplecat_paralelo');
+    if (bcvGuardada) setTasaBCV(parseFloat(bcvGuardada));
+    if (paraleloGuardada) setTasaParalelo(parseFloat(paraleloGuardada));
   }, []);
+
+  const actualizarTasaBCV = (val: number) => {
+    setTasaBCV(val);
+    localStorage.setItem('purplecat_bcv', val.toString());
+  };
+
+  const actualizarTasaParalelo = (val: number) => {
+    setTasaParalelo(val);
+    localStorage.setItem('purplecat_paralelo', val.toString());
+  };
 
   async function fetchProductos() {
     try {
@@ -87,14 +112,12 @@ export default function InventarioPurpleCat() {
     e.preventDefault();
     if (!productoEditando) return;
 
-    // Convertir el texto de URLs separadas por línea en un arreglo de strings
     const listaImagenes = productoEditando.imagenesTexto
       ? productoEditando.imagenesTexto.split('\n').map(u => u.trim()).filter(u => u.length > 0)
       : (productoEditando.imagenes || []);
 
     const mainImage = productoEditando.image_url || listaImagenes[0] || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg';
 
-    // Asegurarnos de que la principal esté en la lista
     if (mainImage && !listaImagenes.includes(mainImage)) {
       listaImagenes.unshift(mainImage);
     }
@@ -105,10 +128,10 @@ export default function InventarioPurpleCat() {
       categoria: productoEditando.categoria,
       talla: productoEditando.talla,
       color: productoEditando.color,
-      precio_costo: productoEditando.precio_costo,
-      precio_venta: productoEditando.precio_venta,
-      stock: productoEditando.stock,
-      stock_minimo: productoEditando.stock_minimo,
+      precio_costo: parseFloat(Number(productoEditando.precio_costo || 0).toFixed(2)),
+      precio_venta: parseFloat(Number(productoEditando.precio_venta || 0).toFixed(2)),
+      stock: parseInt(String(productoEditando.stock || 0)),
+      stock_minimo: parseInt(String(productoEditando.stock_minimo || 3)),
       descripcion: productoEditando.descripcion,
       image_url: mainImage,
       imagenes: listaImagenes
@@ -136,7 +159,6 @@ export default function InventarioPurpleCat() {
   }
 
   function abrirVisor(prod: Producto) {
-    // Combinar la foto principal con la lista de fotos secundarias
     let todas = [prod.image_url];
     if (prod.imagenes && Array.isArray(prod.imagenes)) {
       prod.imagenes.forEach(img => {
@@ -153,6 +175,13 @@ export default function InventarioPurpleCat() {
     });
   }
 
+  // Cálculos para la Calculadora de Precios
+  const costoTotalBase = (Number(calcCosto) || 0) + (Number(calcFlete) || 0);
+  const precioVentaSugeridoUSD = costoTotalBase * (1 + (Number(calcMargen) || 0) / 100);
+  const gananciaNetaUSD = precioVentaSugeridoUSD - costoTotalBase;
+  const precioBsBCV = precioVentaSugeridoUSD * tasaBCV;
+  const precioBsParalelo = precioVentaSugeridoUSD * tasaParalelo;
+
   // Filtrado
   const categoriasUnicas = ['Todas', ...Array.from(new Set(productos.map(p => p.categoria)))];
   const tallasUnicas = ['Todas', ...Array.from(new Set(productos.map(p => p.talla)))];
@@ -168,16 +197,16 @@ export default function InventarioPurpleCat() {
   return (
     <div className="min-h-screen bg-[#0a0a12] text-gray-200 p-4 md:p-8 font-sans selection:bg-violet-900 selection:text-white">
       {/* Header Gótico con Logo Central */}
-      <header className="flex flex-col items-center mb-10 border-b border-violet-950/60 pb-8">
+      <header className="flex flex-col items-center mb-6 border-b border-violet-950/60 pb-6">
         <div className="relative group">
           <div className="absolute -inset-1 bg-gradient-to-r from-violet-600 to-purple-900 rounded-full blur opacity-40 group-hover:opacity-75 transition duration-500"></div>
           <img 
             src="https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg" 
             alt="Purple Cat Logo" 
-            className="relative w-36 h-36 object-contain rounded-full border-2 border-violet-600/50 shadow-[0_0_25px_rgba(139,92,246,0.3)] bg-black"
+            className="relative w-32 h-32 object-contain rounded-full border-2 border-violet-600/50 shadow-[0_0_25px_rgba(139,92,246,0.3)] bg-black"
           />
         </div>
-        <h1 className="text-4xl md:text-5xl font-serif text-violet-400 tracking-widest uppercase mt-4 text-center drop-shadow-[0_2px_10px_rgba(139,92,246,0.5)]">
+        <h1 className="text-4xl md:text-5xl font-serif text-violet-400 tracking-widest uppercase mt-3 text-center drop-shadow-[0_2px_10px_rgba(139,92,246,0.5)]">
           Purple Cat
         </h1>
         <p className="text-xs text-violet-300/60 mt-1 uppercase tracking-widest font-mono">
@@ -185,7 +214,49 @@ export default function InventarioPurpleCat() {
         </p>
       </header>
 
-      {/* Barra de Herramientas: Búsqueda, Filtros y Nuevo Producto */}
+      {/* BARRA DE TASAS DE CAMBIO (VENEZUELA) */}
+      <div className="max-w-7xl mx-auto mb-6 bg-gradient-to-r from-[#161625] via-[#1c1b33] to-[#161625] border border-violet-800/40 p-3 rounded-xl shadow-xl flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🇻🇪</span>
+          <span className="text-xs font-bold text-violet-300 uppercase tracking-wider font-mono">Tasas de Cambio:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Tasa BCV */}
+          <div className="flex items-center gap-2 bg-[#0a0a12] px-3 py-1.5 rounded-lg border border-violet-900/50">
+            <label className="text-xs text-blue-400 font-semibold font-mono">BCV (Bs/$):</label>
+            <input 
+              type="number" 
+              step="0.01"
+              value={tasaBCV}
+              onChange={(e) => actualizarTasaBCV(parseFloat(e.target.value) || 0)}
+              className="w-20 bg-transparent text-white font-mono font-bold text-sm focus:outline-none text-right"
+            />
+          </div>
+
+          {/* Tasa Paralelo */}
+          <div className="flex items-center gap-2 bg-[#0a0a12] px-3 py-1.5 rounded-lg border border-violet-900/50">
+            <label className="text-xs text-purple-400 font-semibold font-mono">Paralelo (Bs/$):</label>
+            <input 
+              type="number" 
+              step="0.01"
+              value={tasaParalelo}
+              onChange={(e) => actualizarTasaParalelo(parseFloat(e.target.value) || 0)}
+              className="w-20 bg-transparent text-white font-mono font-bold text-sm focus:outline-none text-right"
+            />
+          </div>
+
+          {/* Botón Abrir Calculadora */}
+          <button
+            onClick={() => setModalCalcAbierto(true)}
+            className="bg-violet-900/60 hover:bg-violet-700 text-violet-200 border border-violet-500/50 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-[0_0_10px_rgba(139,92,246,0.2)]"
+          >
+            🧮 Calculadora de Precios
+          </button>
+        </div>
+      </div>
+
+      {/* Barra de Herramientas: Búsqueda y Filtros */}
       <div className="max-w-7xl mx-auto mb-8 bg-[#161625]/80 border border-violet-900/30 p-4 rounded-xl shadow-2xl backdrop-blur-md flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="w-full md:w-1/3">
           <input 
@@ -226,8 +297,8 @@ export default function InventarioPurpleCat() {
                 categoria: 'Corsets',
                 talla: 'M',
                 color: 'Negro',
-                precio_costo: 0,
-                precio_venta: 0,
+                precio_costo: 0.00,
+                precio_venta: 0.00,
                 stock: 0,
                 stock_minimo: 3,
                 descripcion: '',
@@ -257,6 +328,11 @@ export default function InventarioPurpleCat() {
               ? prod.imagenes.length 
               : 1;
 
+            const ventaUSD = Number(prod.precio_venta || 0);
+            const costoUSD = Number(prod.precio_costo || 0);
+            const ventaBsBCV = (ventaUSD * tasaBCV).toFixed(2);
+            const ventaBsParalelo = (ventaUSD * tasaParalelo).toFixed(2);
+
             return (
               <div 
                 key={prod.id} 
@@ -268,7 +344,7 @@ export default function InventarioPurpleCat() {
                     : 'border-violet-900/20 hover:border-violet-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.2)]'
                 }`}
               >
-                {/* Status Badges */}
+                {/* Badges de Stock */}
                 <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1">
                   {agotado && (
                     <span className="bg-red-950/90 text-red-400 border border-red-600/50 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider backdrop-blur-md">
@@ -282,11 +358,11 @@ export default function InventarioPurpleCat() {
                   )}
                 </div>
 
-                {/* Contenedor Imagen Referencial (Haz Clic para Ver Galería) */}
+                {/* Imagen del Producto */}
                 <div 
                   onClick={() => abrirVisor(prod)}
                   className="h-52 overflow-hidden bg-black/60 relative cursor-pointer group/img"
-                  title="Haz clic para abrir la galería de fotos de este producto"
+                  title="Haz clic para abrir la galería de fotos"
                 >
                   <img 
                     src={prod.image_url || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg'} 
@@ -297,13 +373,12 @@ export default function InventarioPurpleCat() {
                     {prod.sku}
                   </span>
 
-                  {/* Icono indicador de Galería de Fotos */}
                   <span className="absolute bottom-2 right-2 bg-violet-950/90 text-violet-200 text-[10px] px-2 py-0.5 rounded border border-violet-700/50 flex items-center gap-1 backdrop-blur-sm group-hover/img:bg-violet-800 transition-colors">
                     🖼️ {totalFotos} {totalFotos === 1 ? 'foto' : 'fotos'}
                   </span>
                 </div>
 
-                {/* Detalles del Producto */}
+                {/* Info del Producto */}
                 <div className="p-4 flex-grow flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start mb-1">
@@ -339,14 +414,27 @@ export default function InventarioPurpleCat() {
                   </div>
 
                   <div>
-                    <div className="flex justify-between items-baseline mb-3 pt-2 border-t border-violet-900/20">
-                      <div>
-                        <span className="text-[10px] text-gray-500 uppercase block">Costo / Venta</span>
-                        <span className="text-xs text-gray-400 font-mono">${prod.precio_costo} / </span>
-                        <span className="text-lg font-bold text-emerald-400 font-mono">${prod.precio_venta}</span>
+                    {/* Precios con Decimales y Conversión a Bolívares */}
+                    <div className="bg-black/40 p-2.5 rounded-lg border border-violet-900/20 mb-3 space-y-1">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-[10px] text-gray-500 uppercase">Costo:</span>
+                        <span className="text-xs text-gray-400 font-mono">${costoUSD.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-baseline pt-1 border-t border-violet-900/30">
+                        <span className="text-xs font-bold text-violet-300">Venta ($):</span>
+                        <span className="text-lg font-bold text-emerald-400 font-mono">${ventaUSD.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] pt-1 text-gray-400 font-mono">
+                        <span className="text-blue-400/90">Bs (BCV):</span>
+                        <span>Bs {ventaBsBCV}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] text-gray-400 font-mono">
+                        <span className="text-purple-400/90">Bs (Paralelo):</span>
+                        <span>Bs {ventaBsParalelo}</span>
                       </div>
                     </div>
 
+                    {/* Controles de Stock */}
                     <div className="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-violet-900/30">
                       <span className="text-xs text-violet-300/70 font-mono uppercase pl-1">Stock</span>
                       <div className="flex items-center gap-2">
@@ -377,10 +465,96 @@ export default function InventarioPurpleCat() {
         </div>
       )}
 
-      {/* --- MODAL VISOR DE FOTOS / GALERÍA --- */}
+      {/* --- MODAL CALCULADORA DE PRECIOS GÓTICA --- */}
+      {modalCalcAbierto && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#161625] border border-violet-600/50 rounded-2xl p-6 max-w-lg w-full shadow-[0_0_50px_rgba(139,92,246,0.3)]">
+            <div className="flex justify-between items-center mb-5 border-b border-violet-900/40 pb-3">
+              <h3 className="text-xl font-serif text-violet-400 flex items-center gap-2">
+                🧮 Calculadora de Precios & Márgenes
+              </h3>
+              <button 
+                onClick={() => setModalCalcAbierto(false)}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] text-violet-300 block mb-1">Costo Base ($)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={calcCosto}
+                    onChange={(e) => setCalcCosto(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-violet-300 block mb-1">Envío/Flete ($)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={calcFlete}
+                    onChange={(e) => setCalcFlete(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-violet-300 block mb-1">% Ganancia</label>
+                  <input 
+                    type="number" 
+                    step="1"
+                    value={calcMargen}
+                    onChange={(e) => setCalcMargen(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Resultados en vivo */}
+              <div className="bg-[#0a0a12] p-4 rounded-xl border border-violet-800/40 space-y-3 mt-4">
+                <div className="flex justify-between items-center text-xs text-gray-400 border-b border-violet-900/30 pb-2">
+                  <span>Costo Total Invertido:</span>
+                  <span className="font-mono text-white font-bold">${costoTotalBase.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-sm">
+                  <span className="font-bold text-emerald-400">Precio Sugerido Venta ($):</span>
+                  <span className="font-mono text-2xl font-bold text-emerald-400">${precioVentaSugeridoUSD.toFixed(2)}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs text-emerald-300/80">
+                  <span>Ganancia Neta ($):</span>
+                  <span className="font-mono font-semibold">+${gananciaNetaUSD.toFixed(2)}</span>
+                </div>
+
+                <div className="pt-3 border-t border-violet-900/40 space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-blue-400 font-mono">Cobro en Bs (Tasa BCV {tasaBCV}):</span>
+                    <span className="font-mono font-bold text-white">Bs {precioBsBCV.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-purple-400 font-mono">Cobro en Bs (Paralelo {tasaParalelo}):</span>
+                    <span className="font-mono font-bold text-white">Bs {precioBsParalelo.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-500 italic text-center">
+                * Las tasas se sincronizan en tiempo real con la barra superior.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL VISOR DE FOTOS --- */}
       {visorImagenes.abierto && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-between p-4 md:p-8 animate-fadeIn">
-          {/* Header Visor */}
           <div className="w-full max-w-4xl flex justify-between items-center text-violet-300 border-b border-violet-900/40 pb-4">
             <div>
               <h3 className="text-xl font-serif text-violet-400">{visorImagenes.titulo}</h3>
@@ -396,7 +570,6 @@ export default function InventarioPurpleCat() {
             </button>
           </div>
 
-          {/* Imagen Principal Grande con Flechas */}
           <div className="relative w-full max-w-4xl flex-grow flex items-center justify-center my-4 overflow-hidden">
             {visorImagenes.lista.length > 1 && (
               <button 
@@ -429,7 +602,6 @@ export default function InventarioPurpleCat() {
             )}
           </div>
 
-          {/* Miniaturas al Pie */}
           {visorImagenes.lista.length > 1 && (
             <div className="flex gap-2 overflow-x-auto max-w-4xl p-2 border-t border-violet-900/30 w-full justify-center">
               {visorImagenes.lista.map((url, i) => (
@@ -448,7 +620,7 @@ export default function InventarioPurpleCat() {
         </div>
       )}
 
-      {/* --- MODAL PARA EDITAR / UNIFICAR FOTOS --- */}
+      {/* --- MODAL EDITAR PRODUCTO CON SOPORTE DECIMAL --- */}
       {modalAbierto && productoEditando && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)] max-h-[90vh] overflow-y-auto">
@@ -526,9 +698,10 @@ export default function InventarioPurpleCat() {
                   <input 
                     type="number" 
                     step="0.01"
-                    value={productoEditando.precio_costo ?? 0} 
+                    value={productoEditando.precio_costo ?? ''} 
                     onChange={e => setProductoEditando({...productoEditando, precio_costo: parseFloat(e.target.value) || 0})}
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono"
+                    placeholder="0.00"
                   />
                 </div>
                 <div>
@@ -536,9 +709,10 @@ export default function InventarioPurpleCat() {
                   <input 
                     type="number" 
                     step="0.01"
-                    value={productoEditando.precio_venta ?? 0} 
+                    value={productoEditando.precio_venta ?? ''} 
                     onChange={e => setProductoEditando({...productoEditando, precio_venta: parseFloat(e.target.value) || 0})}
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono"
+                    placeholder="0.00"
                   />
                 </div>
               </div>
@@ -566,13 +740,12 @@ export default function InventarioPurpleCat() {
 
               <div>
                 <label className="text-xs text-violet-300 block mb-1">
-                  Enlaces de Fotos (Pon una URL por línea para añadir varias fotos al producto):
+                  Enlaces de Fotos (Una URL por línea):
                 </label>
                 <textarea 
-                  rows={4}
+                  rows={3}
                   value={productoEditando.imagenesTexto || ''} 
                   onChange={e => setProductoEditando({...productoEditando, imagenesTexto: e.target.value})}
-                  placeholder="https://.../foto1.jpg&#10;https://.../foto2.jpg"
                   className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-xs"
                 />
               </div>
