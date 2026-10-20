@@ -8,7 +8,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 // RUTA A TU LOGO EN GITHUB (Asegúrate de haber subido logo.png o logo.jpg)
-const LOGO_OFICIAL = "/logo.jpg"
+const LOGO_OFICIAL = "/https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg"
 
 interface Producto {
   id: number; sku: string; nombre: string; categoria: string; talla: string; color: string;
