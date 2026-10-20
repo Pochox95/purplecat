@@ -8,7 +8,7 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 // CAMBIA ESTO: Pega aquí entre las comillas el link que copiaste de Supabase
-const LOGO_OFICIAL = "TU_LINK_AQUI"
+const LOGO_OFICIAL = "https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo%20(1).jpg"
 
 interface Producto {
   id: number; sku: string; nombre: string; categoria: string; talla: string; color: string;
