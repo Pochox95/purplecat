@@ -7,8 +7,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// RUTA A TU LOGO EN GITHUB (Asegúrate de haber subido logo.png o logo.jpg)
-const LOGO_OFICIAL = "/https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg"
+// EL LINK OFICIAL DE TU LOGO EN SUPABASE
+const LOGO_OFICIAL = "https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg"
 
 interface Producto {
   id: number; sku: string; nombre: string; categoria: string; talla: string; color: string;
@@ -118,94 +118,99 @@ export default function Home() {
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-[#0a0a12]">
-      <div className="text-purple-400 text-xl animate-pulse">🐱 Cargando Purple Cat...</div>
+      <div className="text-purple-400 text-xl animate-pulse font-serif uppercase tracking-widest">Cargando Purple Cat...</div>
     </div>
   )
 
   return (
     <div className="min-h-screen bg-[#0a0a12] p-4 md:p-8 text-[#e2d9f3]">
       <header className="flex flex-col items-center justify-center mb-10">
-        <img 
-          src={LOGO_OFICIAL} 
-          alt="Purple Cat Logo" 
-          className="h-32 md:h-44 object-contain drop-shadow-[0_0_20px_rgba(124,58,237,0.6)] mb-4"
-        />
+        <div className="relative p-1 bg-gradient-to-b from-purple-600 to-transparent rounded-2xl mb-4 shadow-[0_0_30px_rgba(124,58,237,0.4)]">
+           <img 
+            src={LOGO_OFICIAL} 
+            alt="Logo" 
+            className="h-32 md:h-48 w-auto object-contain rounded-xl bg-[#0a0a12]"
+          />
+        </div>
         <div className="text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-[0.2em] uppercase">Purple Cat</h1>
-          <div className="h-1 w-24 bg-purple-600 mx-auto mt-2 rounded-full opacity-50"></div>
+          <h1 className="text-4xl md:text-6xl font-bold text-purple-400 tracking-[0.2em] uppercase font-serif">Purple Cat</h1>
+          <div className="h-1 w-32 bg-purple-600 mx-auto mt-3 rounded-full opacity-50 shadow-[0_0_10px_rgba(124,58,237,0.8)]"></div>
         </div>
       </header>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
-        <div className="bg-[#1a1a2e] border border-purple-900/50 rounded-xl p-4 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-10">
+        <div className="bg-[#161625] border border-purple-900/40 rounded-2xl p-4 text-center shadow-lg">
           <div className="text-2xl md:text-3xl font-bold text-purple-400">{totalStock}</div>
-          <div className="text-xs text-purple-300/50 mt-1 uppercase tracking-widest">Stock Total</div>
+          <div className="text-[10px] text-purple-300/40 mt-1 uppercase tracking-widest">Stock Total</div>
         </div>
-        <div className="bg-[#1a1a2e] border border-purple-900/50 rounded-xl p-4 text-center">
+        <div className="bg-[#161625] border border-purple-900/40 rounded-2xl p-4 text-center shadow-lg">
           <div className="text-2xl md:text-3xl font-bold text-green-400">${valorTotal.toLocaleString()}</div>
-          <div className="text-xs text-purple-300/50 mt-1 uppercase tracking-widest">Valor</div>
+          <div className="text-[10px] text-purple-300/40 mt-1 uppercase tracking-widest">Valor Venta</div>
         </div>
-        <div className="bg-[#1a1a2e] border border-red-900/50 rounded-xl p-4 text-center">
-          <div className="text-2xl md:text-3xl font-bold text-red-400">{agotados}</div>
-          <div className="text-xs text-purple-300/50 mt-1 uppercase tracking-widest">Agotados</div>
+        <div className="bg-[#161625] border border-red-900/30 rounded-2xl p-4 text-center shadow-lg">
+          <div className="text-2xl md:text-3xl font-bold text-red-500">{agotados}</div>
+          <div className="text-[10px] text-purple-300/40 mt-1 uppercase tracking-widest">Agotados</div>
         </div>
-        <div className="bg-[#1a1a2e] border border-yellow-900/50 rounded-xl p-4 text-center">
-          <div className="text-2xl md:text-3xl font-bold text-yellow-400">{stockBajo}</div>
-          <div className="text-xs text-purple-300/50 mt-1 uppercase tracking-widest">Bajo</div>
+        <div className="bg-[#161625] border border-yellow-900/30 rounded-2xl p-4 text-center shadow-lg">
+          <div className="text-2xl md:text-3xl font-bold text-yellow-500">{stockBajo}</div>
+          <div className="text-[10px] text-purple-300/40 mt-1 uppercase tracking-widest">Stock Bajo</div>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 mb-8">
-        <input type="text" placeholder="🔍 Buscar prenda..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
-          className="flex-1 bg-[#161625] border border-purple-900/40 rounded-lg px-4 py-3 text-white focus:border-purple-500 focus:outline-none transition-all" />
+      <div className="flex flex-col md:flex-row gap-3 mb-10">
+        <input type="text" placeholder="🔍 BUSCAR PRENDA..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+          className="flex-1 bg-[#12121f] border border-purple-900/30 rounded-xl px-4 py-4 text-white placeholder-purple-300/20 focus:border-purple-500 focus:outline-none transition-all" />
         <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}
-          className="bg-[#161625] border border-purple-900/40 rounded-lg px-4 py-3 text-purple-200 focus:outline-none cursor-pointer">
+          className="bg-[#12121f] border border-purple-900/30 rounded-xl px-4 py-4 text-purple-200 focus:outline-none cursor-pointer">
           {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button onClick={() => abrirModal()} className="bg-purple-700 hover:bg-purple-600 text-white font-bold py-3 px-8 rounded-lg transition-all shadow-lg shadow-purple-900/20">
-          + Nueva Prenda
+        <button onClick={() => abrirModal()} className="bg-purple-700 hover:bg-purple-600 text-white font-bold py-4 px-10 rounded-xl transition-all shadow-xl shadow-purple-900/20 uppercase tracking-widest text-sm">
+          + NUEVA PRENDA
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
         {filtrados.map(p => (
-          <div key={p.id} className={`bg-[#161625] border rounded-2xl overflow-hidden transition-all hover:shadow-[0_0_20px_rgba(0,0,0,0.5)] ${p.stock === 0 ? 'border-red-900/50 opacity-70' : p.stock < (p.stock_minimo || 3) ? 'border-yellow-700/50' : 'border-purple-900/30'}`}>
-            <div className="h-56 bg-black flex items-center justify-center overflow-hidden">
+          <div key={p.id} className={`bg-[#161625] border rounded-2xl overflow-hidden transition-all hover:scale-[1.02] hover:shadow-2xl ${p.stock === 0 ? 'border-red-900/40 opacity-70' : p.stock < (p.stock_minimo || 3) ? 'border-yellow-700/40' : 'border-purple-900/20'}`}>
+            <div className="h-60 bg-black flex items-center justify-center overflow-hidden border-b border-purple-900/10">
               {p.image_url ? (
                 <img src={p.image_url} alt={p.nombre} className="w-full h-full object-cover" />
               ) : (
-                <span className="text-6xl opacity-10">🐈‍⬛</span>
+                <div className="flex flex-col items-center opacity-10">
+                   <span className="text-7xl">🐈‍⬛</span>
+                   <span className="text-[10px] uppercase tracking-widest mt-2">Purple Cat</span>
+                </div>
               )}
             </div>
-            <div className="p-5">
-              <h3 className="font-bold text-lg text-white mb-1 truncate">{p.nombre}</h3>
-              <p className="text-purple-500 text-xs tracking-widest mb-3">{p.sku || 'SIN SKU'}</p>
+            <div className="p-6">
+              <h3 className="font-bold text-xl text-white mb-1 truncate font-serif uppercase tracking-tight">{p.nombre}</h3>
+              <p className="text-purple-500 text-[10px] tracking-[0.2em] mb-4 font-bold">{p.sku || 'S/N SKU'}</p>
               
-              <div className="flex gap-2 mb-4">
-                <span className="bg-purple-950/50 text-purple-300 text-[10px] uppercase px-2 py-1 rounded border border-purple-800/30">{p.talla}</span>
-                <span className="bg-purple-950/50 text-purple-300 text-[10px] uppercase px-2 py-1 rounded border border-purple-800/30">{p.color}</span>
+              <div className="flex gap-2 mb-6">
+                <span className="bg-purple-950/40 text-purple-300 text-[9px] uppercase px-3 py-1 rounded-md border border-purple-800/20 font-bold tracking-tighter">TALLA {p.talla}</span>
+                <span className="bg-purple-950/40 text-purple-300 text-[9px] uppercase px-3 py-1 rounded-md border border-purple-800/20 font-bold tracking-tighter">{p.color}</span>
               </div>
 
-              <div className="flex justify-between items-end mb-5">
+              <div className="flex justify-between items-end mb-6">
                 <div>
-                  <p className="text-green-400 font-bold text-xl">${(p.precio_venta || 0).toLocaleString()}</p>
-                  <p className="text-purple-300/30 text-[10px] uppercase">Venta</p>
+                  <p className="text-green-400 font-bold text-2xl tracking-tighter">${(p.precio_venta || 0).toLocaleString()}</p>
+                  <p className="text-purple-300/20 text-[9px] uppercase tracking-[0.2em] font-bold">Venta Público</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-purple-300/50 font-medium">${(p.precio_costo || 0).toLocaleString()}</p>
-                  <p className="text-purple-300/30 text-[10px] uppercase">Costo</p>
+                  <p className="text-purple-300/40 font-medium text-sm">${(p.precio_costo || 0).toLocaleString()}</p>
+                  <p className="text-purple-300/20 text-[9px] uppercase tracking-[0.2em] font-bold">Costo Neto</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between bg-black/30 p-2 rounded-xl border border-purple-900/20">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => cambiarStock(p.id, -1)} className="bg-red-950/40 hover:bg-red-900 text-red-400 w-8 h-8 rounded-lg font-bold transition-colors">-</button>
-                  <span className={`text-xl font-bold w-8 text-center ${p.stock === 0 ? 'text-red-500' : p.stock < (p.stock_minimo || 3) ? 'text-yellow-500' : 'text-white'}`}>{p.stock}</span>
-                  <button onClick={() => cambiarStock(p.id, 1)} className="bg-purple-900/40 hover:bg-purple-800 text-purple-400 w-8 h-8 rounded-lg font-bold transition-colors">+</button>
+              <div className="flex items-center justify-between bg-black/40 p-3 rounded-2xl border border-purple-900/10">
+                <div className="flex items-center gap-4">
+                  <button onClick={() => cambiarStock(p.id, -1)} className="bg-red-950/30 hover:bg-red-900/50 text-red-500 w-9 h-9 rounded-xl font-bold transition-all border border-red-900/20 text-xl">-</button>
+                  <span className={`text-2xl font-bold w-10 text-center ${p.stock === 0 ? 'text-red-500' : p.stock < (p.stock_minimo || 3) ? 'text-yellow-500' : 'text-white'}`}>{p.stock}</span>
+                  <button onClick={() => cambiarStock(p.id, 1)} className="bg-purple-900/30 hover:bg-purple-700/50 text-purple-400 w-9 h-9 rounded-xl font-bold transition-all border border-purple-800/20 text-xl">+</button>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => abrirModal(p)} className="text-purple-400 hover:text-white transition-colors">✏️</button>
-                  <button onClick={() => eliminar(p.id)} className="text-red-900 hover:text-red-500 transition-colors">🗑️</button>
+                <div className="flex gap-3">
+                  <button onClick={() => abrirModal(p)} className="text-purple-400/50 hover:text-white transition-colors text-xl">✏️</button>
+                  <button onClick={() => eliminar(p.id)} className="text-red-900/40 hover:text-red-500 transition-colors text-xl">🗑️</button>
                 </div>
               </div>
             </div>
@@ -214,65 +219,72 @@ export default function Home() {
       </div>
 
       {mostrarModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={cerrarModal}>
-          <div className="bg-[#1a1a2e] border border-purple-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold text-purple-400 mb-6 uppercase tracking-widest">{editando ? 'Editar Prenda' : 'Nueva Prenda'}</h2>
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto" onClick={cerrarModal}>
+          <div className="bg-[#161625] border border-purple-800/50 rounded-3xl w-full max-w-lg my-auto p-8 shadow-[0_0_50px_rgba(0,0,0,1)]" onClick={e => e.stopPropagation()}>
+            <h2 className="text-2xl font-bold text-purple-400 mb-8 uppercase tracking-[0.3em] text-center font-serif">{editando ? 'Editar Prenda' : 'Nueva Prenda'}</h2>
             
-            <div className="space-y-4">
-              <div>
-                <label className="text-purple-300/60 text-[10px] uppercase mb-1 block tracking-widest">Foto de la prenda</label>
-                {form.image_url && <img src={form.image_url} alt="Preview" className="w-full h-40 object-cover rounded-xl mb-3 border border-purple-900/50" />}
-                <input type="file" accept="image/*" onChange={e => { if (e.target.files?.[0]) subirImagen(e.target.files[0]) }}
-                  className="w-full text-xs text-purple-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-purple-900 file:text-white file:cursor-pointer" />
-                {subiendoImagen && <p className="text-purple-500 text-[10px] mt-2 animate-pulse">Subiendo a la nube...</p>}
+            <div className="space-y-5">
+              <div className="group">
+                <label className="text-purple-300/40 text-[9px] uppercase mb-2 block tracking-widest font-bold">Imagen de la prenda</label>
+                <div className="relative rounded-2xl overflow-hidden bg-black/50 border border-purple-900/30 group-hover:border-purple-500/50 transition-all">
+                  {form.image_url ? (
+                    <img src={form.image_url} alt="Preview" className="w-full h-44 object-cover" />
+                  ) : (
+                    <div className="h-44 flex items-center justify-center text-purple-900/30 text-4xl">📸</div>
+                  )}
+                  <input type="file" accept="image/*" onChange={e => { if (e.target.files?.[0]) subirImagen(e.target.files[0]) }}
+                    className="absolute inset-0 opacity-0 cursor-pointer" />
+                </div>
+                {subiendoImagen && <p className="text-purple-500 text-[9px] mt-2 animate-pulse font-bold uppercase tracking-widest text-center">Subiendo a la nube gótica...</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <input value={form.nombre} onChange={e => setForm({...form, nombre: e.target.value})}
-                    className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white focus:border-purple-500 focus:outline-none" placeholder="Nombre de la prenda" />
+                    className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white focus:border-purple-500 focus:outline-none transition-all" placeholder="NOMBRE DEL PRODUCTO" />
                 </div>
                 <input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})}
-                  className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white focus:border-purple-500 focus:outline-none" placeholder="SKU" />
+                  className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white focus:border-purple-500 focus:outline-none" placeholder="SKU" />
                 <select value={form.categoria} onChange={e => setForm({...form, categoria: e.target.value})}
-                  className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white">
+                  className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white">
                   {CATEGORIAS.filter(c => c !== 'Todas').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select value={form.talla} onChange={e => setForm({...form, talla: e.target.value})}
-                  className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white">
+                  className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white">
                   {TALLAS.filter(t => t !== 'Todas').map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <input value={form.color} onChange={e => setForm({...form, color: e.target.value})}
-                  className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white focus:border-purple-500 focus:outline-none" placeholder="Color" />
+                  className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white focus:border-purple-500 focus:outline-none" placeholder="COLOR" />
+                
                 <div>
-                  <label className="text-purple-300/40 text-[10px] uppercase ml-1">Costo</label>
+                  <label className="text-purple-300/30 text-[8px] uppercase ml-2 tracking-widest font-bold">Costo Neto</label>
                   <input type="number" value={form.precio_costo} onChange={e => setForm({...form, precio_costo: Number(e.target.value)})}
-                    className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white" />
+                    className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white" />
                 </div>
                 <div>
-                  <label className="text-purple-300/40 text-[10px] uppercase ml-1">Venta</label>
+                  <label className="text-purple-300/30 text-[8px] uppercase ml-2 tracking-widest font-bold">Precio Venta</label>
                   <input type="number" value={form.precio_venta} onChange={e => setForm({...form, precio_venta: Number(e.target.value)})}
-                    className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white" />
+                    className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white font-bold text-green-400" />
                 </div>
                 <div>
-                  <label className="text-purple-300/40 text-[10px] uppercase ml-1">Stock</label>
+                  <label className="text-purple-300/30 text-[8px] uppercase ml-2 tracking-widest font-bold">Stock Actual</label>
                   <input type="number" value={form.stock} onChange={e => setForm({...form, stock: Number(e.target.value)})}
-                    className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white" />
+                    className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white" />
                 </div>
                 <div>
-                  <label className="text-purple-300/40 text-[10px] uppercase ml-1">Mínimo</label>
+                  <label className="text-purple-300/30 text-[8px] uppercase ml-2 tracking-widest font-bold">Aviso Mínimo</label>
                   <input type="number" value={form.stock_minimo} onChange={e => setForm({...form, stock_minimo: Number(e.target.value)})}
-                    className="w-full bg-black/40 border border-purple-900/40 rounded-lg px-4 py-3 text-white" />
+                    className="w-full bg-black/30 border border-purple-900/20 rounded-xl px-4 py-4 text-white" />
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-4 mt-8">
-              <button onClick={guardar} className="flex-1 bg-purple-700 hover:bg-purple-600 text-white font-bold py-4 rounded-xl transition-all uppercase tracking-widest text-sm">
-                Guardar
+            <div className="flex gap-4 mt-10">
+              <button onClick={guardar} className="flex-1 bg-purple-700 hover:bg-purple-600 text-white font-bold py-5 rounded-2xl transition-all uppercase tracking-[0.2em] text-xs shadow-lg shadow-purple-900/30">
+                GUARDAR CAMBIOS
               </button>
-              <button onClick={cerrarModal} className="px-8 bg-transparent border border-purple-900/50 text-purple-400 py-4 rounded-xl hover:bg-purple-900/20 transition-all uppercase tracking-widest text-sm">
-                Cerrar
+              <button onClick={cerrarModal} className="px-8 bg-transparent border border-purple-900/40 text-purple-400 py-5 rounded-2xl hover:bg-purple-900/10 transition-all uppercase tracking-[0.2em] text-xs">
+                CERRAR
               </button>
             </div>
           </div>
