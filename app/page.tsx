@@ -7,8 +7,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// CAMBIA ESTO: Pega aquí entre las comillas el link que copiaste de Supabase
-const LOGO_OFICIAL = "https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo%20(1).jpg"
+// RUTA A TU LOGO EN GITHUB (Asegúrate de haber subido logo.png o logo.jpg)
+const LOGO_OFICIAL = "/logo.jpg"
 
 interface Producto {
   id: number; sku: string; nombre: string; categoria: string; talla: string; color: string;
@@ -128,8 +128,7 @@ export default function Home() {
         <img 
           src={LOGO_OFICIAL} 
           alt="Purple Cat Logo" 
-          className="h-32 md:h-40 object-contain drop-shadow-[0_0_15px_rgba(124,58,237,0.5)] mb-4"
-          onError={(e) => { e.currentTarget.style.display = 'none' }} 
+          className="h-32 md:h-44 object-contain drop-shadow-[0_0_20px_rgba(124,58,237,0.6)] mb-4"
         />
         <div className="text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-purple-400 tracking-[0.2em] uppercase">Purple Cat</h1>
