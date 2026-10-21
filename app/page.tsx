@@ -1,12 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// Inicialización de Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import Commerce from '../components/Commerce';
+import AccessGate from '../components/AccessGate';
 
 interface Producto {
   id: number;
@@ -24,7 +21,13 @@ interface Producto {
   imagenes?: string[];
 }
 
-export default function InventarioPurpleCat() {
+export default function Page() {
+  return <AccessGate><InventarioPurpleCat /></AccessGate>;
+}
+
+function InventarioPurpleCat() {
+  const [owner, setOwner] = useState(false);
+  useEffect(() => { void supabase.rpc('app_role').then(({ data }) => setOwner(data === 'dueno')); }, []);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState('');
@@ -75,7 +78,7 @@ export default function InventarioPurpleCat() {
     localStorage.setItem('purplecat_paralelo', val.toString());
   };
 
-  async function fetchProductos() {
+  const fetchProductos = useCallback(async () => {
     try {
       setCargando(true);
       const { data, error } = await supabase
@@ -90,25 +93,15 @@ export default function InventarioPurpleCat() {
     } finally {
       setCargando(false);
     }
-  }
+  }, []);
 
   async function ajustarStock(id: number, delta: number) {
     const prod = productos.find(p => p.id === id);
     if (!prod) return;
 
-    const nuevoStock = Math.max(0, prod.stock + delta);
-    
-    setProductos(prev => prev.map(p => p.id === id ? { ...p, stock: nuevoStock } : p));
-
-    const { error } = await supabase
-      .from('productos')
-      .update({ stock: nuevoStock })
-      .eq('id', id);
-
-    if (error) {
-      console.error("Error al actualizar stock:", error.message);
-      fetchProductos();
-    }
+    const { error } = await supabase.rpc('pc_ajustar_stock', { producto: id, delta });
+    if (error) alert(error.message);
+    await fetchProductos();
   }
 
   // Función para Subir Fotos Directamente a Supabase Storage
@@ -200,12 +193,14 @@ export default function InventarioPurpleCat() {
 
     if (productoEditando.id) {
       const { error } = await supabase.from('productos').update(payload).eq('id', productoEditando.id);
+      if (error) alert(error.message);
       if (!error) {
         setModalAbierto(false);
         fetchProductos();
       }
     } else {
       const { error } = await supabase.from('productos').insert([payload]);
+      if (error) alert(error.message);
       if (!error) {
         setModalAbierto(false);
         fetchProductos();
@@ -297,6 +292,8 @@ export default function InventarioPurpleCat() {
         </p>
       </header>
 
+      <Commerce productos={productos} tasaBCV={tasaBCV} tasaParalelo={tasaParalelo} refresh={fetchProductos} />
+
       {/* BARRA DE TASAS DE CAMBIO (VENEZUELA) */}
       <div className="max-w-7xl mx-auto mb-6 bg-gradient-to-r from-[#161625] via-[#1c1b33] to-[#161625] border border-violet-800/40 p-3.5 rounded-xl shadow-xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-2">
@@ -348,7 +345,7 @@ export default function InventarioPurpleCat() {
           />
         </div>
 
-        <div className="flex w-full md:w-auto gap-3">
+        <div className="flex flex-wrap w-full md:w-auto gap-3">
           <select 
             value={categoriaFiltro} 
             onChange={(e) => setCategoriaFiltro(e.target.value)}
@@ -369,7 +366,7 @@ export default function InventarioPurpleCat() {
             ))}
           </select>
 
-          <button 
+          <button style={{ display: owner ? undefined : 'none' }} disabled={!owner}
             onClick={() => {
               setProductoEditando({
                 sku: `PUR-${String(productos.length + 1).padStart(2, '0')}`,
@@ -465,7 +462,7 @@ export default function InventarioPurpleCat() {
                       <h2 className="text-lg font-serif text-violet-300 font-semibold leading-snug line-clamp-1">
                         {prod.nombre}
                       </h2>
-                      <button 
+                      <button style={{ display: owner ? undefined : 'none' }} disabled={!owner}
                         onClick={() => {
                           const imgsTexto = (prod.imagenes && prod.imagenes.length > 0)
                             ? prod.imagenes.join('\n')
@@ -528,7 +525,7 @@ export default function InventarioPurpleCat() {
                     <div className="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-violet-900/30">
                       <span className="text-xs text-violet-300/70 font-mono uppercase pl-1">Stock</span>
                       <div className="flex items-center gap-2">
-                        <button 
+                        <button style={{ display: owner ? undefined : 'none' }} disabled={!owner}
                           onClick={() => ajustarStock(prod.id, -1)}
                           className="w-7 h-7 rounded bg-violet-950 hover:bg-violet-800 text-violet-200 border border-violet-800/50 flex items-center justify-center font-bold text-sm transition-colors active:scale-95"
                         >
@@ -539,7 +536,7 @@ export default function InventarioPurpleCat() {
                         }`}>
                           {prod.stock}
                         </span>
-                        <button 
+                        <button style={{ display: owner ? undefined : 'none' }} disabled={!owner}
                           onClick={() => ajustarStock(prod.id, 1)}
                           className="w-7 h-7 rounded bg-violet-950 hover:bg-violet-800 text-violet-200 border border-violet-800/50 flex items-center justify-center font-bold text-sm transition-colors active:scale-95"
                         >
