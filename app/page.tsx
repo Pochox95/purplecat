@@ -38,6 +38,7 @@ export default function InventarioPurpleCat() {
   // Modal Edit State
   const [modalAbierto, setModalAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<Partial<Producto> & { imagenesTexto?: string } | null>(null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
 
   // Visor / Galería de fotos State
   const [visorImagenes, setVisorImagenes] = useState<{ abierto: boolean; lista: string[]; indice: number; titulo: string }>({
@@ -51,7 +52,7 @@ export default function InventarioPurpleCat() {
   const [modalCalcAbierto, setModalCalcAbierto] = useState(false);
   const [calcCosto, setCalcCosto] = useState<number>(10.00);
   const [calcFlete, setCalcFlete] = useState<number>(1.50);
-  const [calcMargen, setCalcMargen] = useState<number>(50); // % Ganancia
+  const [calcMargen, setCalcMargen] = useState<number>(50);
 
   // Feedback Copiado
   const [mensajeCopiado, setMensajeCopiado] = useState<string | null>(null);
@@ -110,6 +111,68 @@ export default function InventarioPurpleCat() {
     }
   }
 
+  // Función para Subir Fotos Directamente a Supabase Storage
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setSubiendoFoto(true);
+    const nuevasUrls: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+      if (error) {
+        console.error('Error al subir imagen:', error);
+        alert(`Error al subir ${file.name}: ${error.message}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName);
+
+      if (urlData?.publicUrl) {
+        nuevasUrls.push(urlData.publicUrl);
+      }
+    }
+
+    if (nuevasUrls.length > 0) {
+      const textoActual = productoEditando?.imagenesTexto || '';
+      const nuevoTexto = textoActual 
+        ? `${textoActual}\n${nuevasUrls.join('\n')}` 
+        : nuevasUrls.join('\n');
+
+      setProductoEditando(prev => prev ? {
+        ...prev,
+        image_url: prev.image_url || nuevasUrls[0],
+        imagenesTexto: nuevoTexto
+      } : null);
+    }
+
+    setSubiendoFoto(false);
+    e.target.value = '';
+  }
+
+  function eliminarImagenTexto(indexAEliminar: number) {
+    if (!productoEditando?.imagenesTexto) return;
+    const lineas = productoEditando.imagenesTexto.split('\n').filter(Boolean);
+    const filtradas = lineas.filter((_, idx) => idx !== indexAEliminar);
+    const nuevoTexto = filtradas.join('\n');
+    
+    setProductoEditando({
+      ...productoEditando,
+      image_url: filtradas[0] || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg',
+      imagenesTexto: nuevoTexto
+    });
+  }
+
   async function guardarProducto(e: React.FormEvent) {
     e.preventDefault();
     if (!productoEditando) return;
@@ -118,11 +181,7 @@ export default function InventarioPurpleCat() {
       ? productoEditando.imagenesTexto.split('\n').map(u => u.trim()).filter(u => u.length > 0)
       : (productoEditando.imagenes || []);
 
-    const mainImage = productoEditando.image_url || listaImagenes[0] || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg';
-
-    if (mainImage && !listaImagenes.includes(mainImage)) {
-      listaImagenes.unshift(mainImage);
-    }
+    const mainImage = listaImagenes[0] || productoEditando.image_url || 'https://vwwmjlsqtdtzzozyjgxd.supabase.co/storage/v1/object/public/product-images/Purplecat%20logo.jpg';
 
     const payload = {
       sku: productoEditando.sku,
@@ -207,9 +266,13 @@ export default function InventarioPurpleCat() {
     return coincideBusqueda && coincideCategoria && coincideTalla;
   });
 
+  const fotosEnModal = productoEditando?.imagenesTexto 
+    ? productoEditando.imagenesTexto.split('\n').filter(Boolean)
+    : [];
+
   return (
     <div className="min-h-screen bg-[#0a0a12] text-gray-200 p-4 md:p-8 font-sans selection:bg-violet-900 selection:text-white">
-      {/* Notificación Flotante de Copiado */}
+      {/* Feedback Copiado */}
       {mensajeCopiado && (
         <div className="fixed top-4 right-4 z-50 bg-violet-900 text-white px-4 py-2 rounded-lg border border-violet-500 shadow-2xl animate-bounce text-xs font-mono font-bold">
           {mensajeCopiado}
@@ -431,20 +494,18 @@ export default function InventarioPurpleCat() {
                   </div>
 
                   <div>
-                    {/* CUADRO DE PRECIOS DOBLE: EFECTIVO VS BCV */}
+                    {/* Precios Doble */}
                     <div className="bg-black/40 p-2.5 rounded-lg border border-violet-900/20 mb-3 space-y-2">
                       <div className="flex justify-between items-baseline text-[10px] text-gray-500">
                         <span>Costo Invertido:</span>
                         <span className="font-mono text-gray-400">${costoUSD.toFixed(2)}</span>
                       </div>
 
-                      {/* Opción 1: En Efectivo */}
                       <div className="flex justify-between items-center pt-1 border-t border-violet-900/30">
                         <span className="text-xs font-bold text-emerald-400">💵 En Efectivo:</span>
                         <span className="text-base font-bold text-emerald-400 font-mono">${usdEfectivo.toFixed(2)}</span>
                       </div>
 
-                      {/* Opción 2: En Bs a Tasa BCV */}
                       <div className="bg-violet-950/30 p-1.5 rounded border border-violet-800/30 space-y-0.5">
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-blue-300 font-semibold">💳 En Bs a BCV:</span>
@@ -455,7 +516,6 @@ export default function InventarioPurpleCat() {
                         </div>
                       </div>
 
-                      {/* Botón Copiar Oferta para Cliente */}
                       <button
                         onClick={() => copiarPrecioCliente(prod.nombre, usdEfectivo)}
                         className="w-full text-center text-[10px] bg-violet-900/30 hover:bg-violet-800/60 text-violet-300 py-1 rounded border border-violet-700/40 transition-colors font-mono"
@@ -464,7 +524,7 @@ export default function InventarioPurpleCat() {
                       </button>
                     </div>
 
-                    {/* Controles de Stock */}
+                    {/* Stock */}
                     <div className="flex items-center justify-between bg-black/40 p-2 rounded-lg border border-violet-900/30">
                       <span className="text-xs text-violet-300/70 font-mono uppercase pl-1">Stock</span>
                       <div className="flex items-center gap-2">
@@ -495,7 +555,7 @@ export default function InventarioPurpleCat() {
         </div>
       )}
 
-      {/* --- MODAL CALCULADORA DE PRECIOS GÓTICA --- */}
+      {/* --- MODAL CALCULADORA --- */}
       {modalCalcAbierto && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-600/50 rounded-2xl p-6 max-w-lg w-full shadow-[0_0_50px_rgba(139,92,246,0.3)]">
@@ -545,20 +605,17 @@ export default function InventarioPurpleCat() {
                 </div>
               </div>
 
-              {/* Resultados de la Calculadora */}
               <div className="bg-[#0a0a12] p-4 rounded-xl border border-violet-800/40 space-y-3 mt-4">
                 <div className="flex justify-between items-center text-xs text-gray-400 border-b border-violet-900/30 pb-2">
                   <span>Costo Total Invertido:</span>
                   <span className="font-mono text-white font-bold">${costoTotalBase.toFixed(2)}</span>
                 </div>
 
-                {/* Opción Efectivo */}
                 <div className="flex justify-between items-center bg-emerald-950/20 p-2 rounded border border-emerald-800/30">
                   <span className="font-bold text-emerald-400">💵 Precio en Efectivo ($):</span>
                   <span className="font-mono text-xl font-bold text-emerald-400">${precioEfectivoUSD.toFixed(2)}</span>
                 </div>
 
-                {/* Opción BCV Ajustado */}
                 <div className="flex justify-between items-center bg-violet-950/30 p-2 rounded border border-violet-800/40">
                   <div>
                     <span className="font-bold text-violet-300 block">💳 Precio en Bs a BCV:</span>
@@ -572,10 +629,6 @@ export default function InventarioPurpleCat() {
                   <span className="font-mono font-semibold">+${gananciaNetaUSD.toFixed(2)}</span>
                 </div>
               </div>
-
-              <p className="text-[11px] text-gray-500 italic text-center">
-                * Si cobras ${precioBCVUSD.toFixed(2)} a Tasa BCV ({tasaBCV}), recibes Bs {totalBsRequeridos.toFixed(2)}, conservando exactamente tu ganancia equivalente a ${precioEfectivoUSD.toFixed(2)} en efectivo.
-              </p>
             </div>
           </div>
         </div>
@@ -649,7 +702,7 @@ export default function InventarioPurpleCat() {
         </div>
       )}
 
-      {/* --- MODAL EDITAR PRODUCTO CON SOPORTE DECIMAL --- */}
+      {/* --- MODAL EDITAR / AGREGAR PRODUCTO CON SUBIDA DE ARCHIVOS --- */}
       {modalAbierto && productoEditando && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)] max-h-[90vh] overflow-y-auto">
@@ -767,34 +820,62 @@ export default function InventarioPurpleCat() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs text-violet-300 block mb-1">
-                  Enlaces de Fotos (Una URL por línea):
+              {/* SECCIÓN DE SUBIDA DIRECTA DE FOTOS */}
+              <div className="bg-[#0a0a12] p-3 rounded-lg border border-violet-900/40 space-y-2">
+                <label className="text-xs text-violet-300 font-semibold block">
+                  📸 Fotos del Producto (Galeria o Cámara):
                 </label>
-                <textarea 
-                  rows={3}
-                  value={productoEditando.imagenesTexto || ''} 
-                  onChange={e => setProductoEditando({...productoEditando, imagenesTexto: e.target.value})}
-                  className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-xs"
-                />
+                
+                <label className="flex items-center justify-center gap-2 bg-violet-950 hover:bg-violet-800 text-violet-200 border border-violet-700/60 p-2.5 rounded-lg cursor-pointer transition-colors text-xs font-semibold">
+                  <span>{subiendoFoto ? '⏳ Subiendo foto(s)...' : '📁 Seleccionar Imagen(es)'}</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    disabled={subiendoFoto}
+                    onChange={handleFileUpload}
+                    className="hidden" 
+                  />
+                </label>
+
+                {/* Vistas Previas de las Fotos Adjuntas */}
+                {fotosEnModal.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 pt-2">
+                    {fotosEnModal.map((url, index) => (
+                      <div key={index} className="relative group/thumb rounded overflow-hidden h-16 bg-black border border-violet-800/40">
+                        <img src={url} alt={`Foto ${index}`} className="w-full h-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => eliminarImagenTexto(index)}
+                          className="absolute top-0.5 right-0.5 bg-red-950/90 text-red-300 text-[10px] w-4 h-4 rounded-full flex items-center justify-center border border-red-600/50"
+                          title="Eliminar foto"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
-                <label className="text-xs text-violet-300 block mb-1">Descripción</label>
+                <label className="text-xs text-violet-300 block mb-1">Descripción del Producto</label>
                 <textarea 
                   rows={2}
                   value={productoEditando.descripcion || ''} 
                   onChange={e => setProductoEditando({...productoEditando, descripcion: e.target.value})}
                   className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white"
+                  placeholder="Ej: Corset de satén negro con ballenas de acero..."
                 />
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-violet-900/40">
                 <button 
                   type="submit" 
-                  className="flex-1 bg-violet-800 hover:bg-violet-700 text-white py-2 rounded-lg font-semibold transition-colors"
+                  disabled={subiendoFoto}
+                  className="flex-1 bg-violet-800 hover:bg-violet-700 text-white py-2 rounded-lg font-semibold transition-colors disabled:opacity-50"
                 >
-                  Guardar
+                  {subiendoFoto ? 'Cargando Fotos...' : 'Guardar Producto'}
                 </button>
                 {productoEditando.id && (
                   <button 
