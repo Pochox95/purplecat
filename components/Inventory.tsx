@@ -258,14 +258,15 @@ export default function Inventory() {
     });
   }
 
-  function copiarPrecioCliente(nombre: string, usdEfectivo: number) {
+  function copiarPrecioCliente(prod: Producto) {
+    const usdEfectivo = Number(prod.precio_venta || 0);
     const totalBs = usdEfectivo * tasaParalelo;
     const usdBcv = tasaBCV > 0 ? totalBs / tasaBCV : usdEfectivo;
 
-    const texto = `Purple Cat 🐾 - ${nombre}:\n• $${usdEfectivo.toFixed(2)} en Efectivo\n• $${usdBcv.toFixed(2)} en Bs a Tasa BCV (${totalBs.toFixed(2)} Bs)`;
+    const texto = `✨ *${prod.nombre}* ✨\n\n💵 Precio Efectivo / USDT: *$${usdEfectivo.toFixed(2)}*\n💳 Pago Móvil (Tasa BCV): *Bs. ${totalBs.toFixed(2)}* (Ref. $${usdBcv.toFixed(2)} BCV)\n\n📌 Talla: ${prod.talla} | Color: ${prod.color}`;
 
     navigator.clipboard.writeText(texto);
-    setMensajeCopiado(`¡Copiado precio de ${nombre}!`);
+    setMensajeCopiado(`¡Copiado precio de ${prod.nombre}!`);
     setTimeout(() => setMensajeCopiado(null), 3000);
   }
 
@@ -559,23 +560,23 @@ export default function Inventory() {
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
-                    <div className="inventory-price">
-                      <div>
-                        <small>Efectivo</small>
-                        <strong>
-                          ${Number(prod.precio_venta || 0).toFixed(2)}
-                        </strong>
+                    
+                    {/* AQUÍ ESTÁ LA NUEVA CALCULADORA DUAL VISUAL EN LA TARJETA */}
+                    <div className="flex flex-col gap-2 w-full my-3">
+                      <div className="flex justify-between items-center bg-emerald-950/30 border border-emerald-800/50 px-3 py-2 rounded-lg">
+                        <small className="text-emerald-400 font-semibold">💵 Efectivo / USDT</small>
+                        <strong className="text-emerald-400 font-mono text-base">${Number(prod.precio_venta || 0).toFixed(2)}</strong>
                       </div>
-                      <div>
-                        <small>Bolívares</small>
-                        <span>
-                          Bs{" "}
-                          {(
-                            Number(prod.precio_venta || 0) * tasaParalelo
-                          ).toFixed(2)}
-                        </span>
+                      <div className="flex justify-between items-center bg-violet-950/30 border border-violet-800/50 px-3 py-2 rounded-lg">
+                        <div className="flex flex-col">
+                          <small className="text-violet-300 font-semibold">📱 Pago Móvil</small>
+                          <span className="text-[10px] text-gray-400">Ref: ${( (Number(prod.precio_venta || 0) * tasaParalelo) / (tasaBCV || 1) ).toFixed(2)} BCV</span>
+                        </div>
+                        <strong className="text-violet-300 font-mono text-base">Bs {(Number(prod.precio_venta || 0) * tasaParalelo).toFixed(2)}</strong>
                       </div>
                     </div>
+                    {/* FIN DE CALCULADORA DUAL */}
+
                     {owner && (
                       <p className="inventory-cost">
                         Costo unitario{" "}
@@ -584,7 +585,7 @@ export default function Inventory() {
                         </span>
                       </p>
                     )}
-                    <div className="inventory-card-footer">
+                    <div className="inventory-card-footer mt-2">
                       <div className="stock-stepper">
                         <span>Stock</span>
                         {owner && (
@@ -608,12 +609,7 @@ export default function Inventory() {
                       </div>
                       <button
                         className="copy-price"
-                        onClick={() =>
-                          copiarPrecioCliente(
-                            prod.nombre,
-                            Number(prod.precio_venta || 0),
-                          )
-                        }
+                        onClick={() => copiarPrecioCliente(prod)}
                         title="Copiar precio para cliente"
                       >
                         Copiar precio
