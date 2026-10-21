@@ -56,9 +56,8 @@ type Audit = {
   despues: unknown;
 };
 type Profile = { id: string; nombre: string; rol: string };
-const field = "bg-[#0a0a12] border border-violet-800 rounded p-2 w-full";
-const button =
-  "border border-violet-700 bg-violet-950 rounded px-3 py-2 disabled:opacity-40";
+const field = "pc-field";
+const button = "pc-button pc-button-quiet";
 async function allRows(table: string, columns = "*") {
   const rows: any[] = [];
   let lastId: number | null = null;
@@ -81,14 +80,17 @@ export default function Commerce({
   tasaBCV,
   tasaParalelo,
   refresh,
+  tab,
+  onNavigate: setTab,
 }: {
   productos: Product[];
   tasaBCV: number;
   tasaParalelo: number;
   refresh: () => Promise<void>;
+  tab: import("./AdminShell").Section;
+  onNavigate: (section: import("./AdminShell").Section) => void;
 }) {
-  const [tab, setTab] = useState("Facturar"),
-    [role, setRole] = useState(""),
+  const [role, setRole] = useState(""),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [cart, setCart] = useState<Item[]>([]),
@@ -185,23 +187,9 @@ export default function Commerce({
       clearInterval(timer);
     };
   }, [refresh]);
-  const tabs = [
-    "Facturar",
-    "Ventas",
-    ...(role === "dueno" ? ["Gastos", "Historial", "Usuarios"] : []),
-  ];
   return (
-    <section className="max-w-7xl mx-auto mb-8 border border-violet-800 rounded-xl p-4">
-      <div className="flex flex-wrap gap-2 mb-4">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            className={`${button} ${t === tab ? "ring-2 ring-violet-400" : ""}`}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
+    <section className="commerce-panel">
+      <div className="commerce-actions">
         <button
           disabled={busy}
           className={button}

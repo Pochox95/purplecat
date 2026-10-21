@@ -2,6 +2,16 @@
 
 Inventario y gestión de ventas en Next.js y Supabase.
 
+## Catálogo público y panel privado
+
+- `/`: catálogo público de solo lectura, búsqueda, categorías, tallas, disponibilidad y galería. Usa las fotos existentes de `image_url` / `imagenes`; si la principal falla intenta la siguiente foto. No hay productos ni ilustraciones de prueba cargados por la aplicación.
+- `/login`: acceso del equipo con correo y contraseña; `admin` funciona como alias de `admin@purplecat.test` si creaste esa cuenta de prueba. La contraseña nunca está incluida ni precargada en el código.
+- `/admin`: panel con barra lateral, inventario, nueva venta, historial de ventas y las secciones exclusivas del dueño. Al salir vuelve al catálogo. La entrada sin sesión lleva al login.
+
+**Para habilitar el catálogo con datos reales, ejecutá `supabase/migrations/202610210002_public_catalog.sql` en SQL Editor después de la migración de comercio.** Si la primera migración ya está aplicada, ejecutá únicamente la nueva. La vista `catalogo_productos` expone campos comerciales y disponibilidad, pero omite costos y stock exacto. Una política restrictiva bloquea el acceso anónimo a la tabla original incluso si quedó una política pública antigua. No modifica ni copia las fotos: conserva las URLs existentes.
+
+Los precios públicos se muestran en USD efectivo. Las tasas del panel siguen siendo locales al navegador; no se publica una conversión a bolívares usando una tasa que el administrador no haya compartido con el visitante.
+
 ## Ejecutar localmente
 
 Requiere Node.js 22.18+ (las pruebas usan TypeScript nativo; se validó con Node 24).
@@ -30,7 +40,7 @@ insert into public.perfiles(id,nombre,rol) values
 5. Configurá las mismas variables de `.env.example` en Vercel y reconstruí el despliegue. El login queda bloqueado hasta tener un perfil válido. El dueño puede cambiar roles de otras cuentas desde Usuarios; no puede quitarse su propio rol.
 6. Opcionalmente habilitá `productos` en la publicación `supabase_realtime`. Las alertas en la aplicación usan Realtime y, como respaldo, consultan cada minuto. No son notificaciones push ni funcionan con la aplicación cerrada.
 
-**La migración no se aplicó al Supabase real ni se publicó en Vercel durante esta implementación.**
+**Las migraciones se entregan en GitHub. Su aplicación al Supabase real y el estado del despliegue en Vercel deben verificarse por separado.**
 
 ## Funciones
 
@@ -43,7 +53,7 @@ insert into public.perfiles(id,nombre,rol) values
 - Dueño: CRUD de inventario, imágenes, ventas, devoluciones, gastos, historial y roles. Empleado: consulta inventario, exporta inventario/ventas y factura. Los permisos se comprueban con RLS y funciones de PostgreSQL, además de la interfaz.
 - Alertas: productos agotados o por debajo del mínimo, con opción de marcarlas como vistas durante la sesión.
 
-El inventario previo conserva su diseño y calculadora. Las tasas siguen siendo locales al navegador. No se agregó un módulo de cierre de caja: no estaba en el código de esta versión y no forma parte de los puntos 3 y 4.
+El inventario conserva su CRUD, galería y calculadora dentro del nuevo panel. Las tasas siguen siendo locales al navegador. No se agregó un módulo de cierre de caja: no estaba en el código de esta versión y no forma parte de los puntos 3 y 4.
 
 ## Validar
 
@@ -53,6 +63,6 @@ npm run typecheck
 npm run build
 ```
 
-Las pruebas de base de datos ejecutan la migración real en PostgreSQL embebido (PGlite), con esquemas simulados `auth`/`storage`. Cubren cálculos, CSV, stock, rollback, reintentos, devolución doble, permisos de empleado, acceso anónimo, auditoría y preservación de otros buckets. No sustituyen la prueba de integración en tu Supabase y Storage reales.
+Las pruebas del catálogo verifican filtros, campos públicos, bloqueo de escrituras anónimas y protección frente a políticas públicas antiguas. Las pruebas de base de datos ejecutan la migración real en PostgreSQL embebido (PGlite), con esquemas simulados `auth`/`storage`. Cubren cálculos, CSV, stock, rollback, reintentos, devolución doble, permisos de empleado, acceso anónimo, auditoría y preservación de otros buckets. No sustituyen la prueba de integración en tu Supabase y Storage reales.
 
 El desarrollo y la compilación usan Webpack explícitamente, porque Turbopack no pudo iniciar su proceso de CSS en este entorno. Se actualizó Next de 14.2.5 a 16.4.2 para corregir las vulnerabilidades de ejecución detectadas. `npm audit --omit=dev` terminó con 0 vulnerabilidades. La auditoría completa aún informa 7 avisos en dependencias de desarrollo de Tailwind 3; React 18 sigue siendo compatible con Next 16, aunque su soporte está deprecado. No se debe interpretar la incorporación de roles como una auditoría integral de seguridad.
