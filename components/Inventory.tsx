@@ -561,7 +561,7 @@ export default function Inventory() {
                         .join(" · ")}
                     </p>
                     
-                    {/* AQUÍ ESTÁ LA NUEVA CALCULADORA DUAL VISUAL EN LA TARJETA */}
+                    {/* CALCULADORA DUAL VISUAL EN CADA TARJETA */}
                     <div className="flex flex-col gap-2 w-full my-3">
                       <div className="flex justify-between items-center bg-emerald-950/30 border border-emerald-800/50 px-3 py-2 rounded-lg">
                         <small className="text-emerald-400 font-semibold">💵 Efectivo / USDT</small>
@@ -575,7 +575,6 @@ export default function Inventory() {
                         <strong className="text-violet-300 font-mono text-base">Bs {(Number(prod.precio_venta || 0) * tasaParalelo).toFixed(2)}</strong>
                       </div>
                     </div>
-                    {/* FIN DE CALCULADORA DUAL */}
 
                     {owner && (
                       <p className="inventory-cost">
@@ -647,7 +646,7 @@ export default function Inventory() {
         )}
       </div>
 
-      {/* --- MODAL CALCULADORA --- */}
+      {/* MODAL CALCULADORA */}
       {modalCalcAbierto && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-600/50 rounded-2xl p-6 max-w-lg w-full shadow-[0_0_50px_rgba(139,92,246,0.3)]">
@@ -752,7 +751,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* --- MODAL VISOR DE FOTOS --- */}
+      {/* MODAL VISOR DE FOTOS */}
       {visorImagenes.abierto && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-between p-4 md:p-8 animate-fadeIn">
           <div className="w-full max-w-4xl flex justify-between items-center text-violet-300 border-b border-violet-900/40 pb-4">
@@ -834,7 +833,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* --- MODAL EDITAR / AGREGAR PRODUCTO CON SUBIDA DE ARCHIVOS --- */}
+      {/* MODAL EDITAR / AGREGAR PRODUCTO CON SUBIDA DE ARCHIVOS */}
       {modalAbierto && productoEditando && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)] max-h-[90vh] overflow-y-auto">
