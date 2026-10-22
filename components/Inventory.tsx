@@ -35,18 +35,15 @@ export default function Inventory() {
   const [categoriaFiltro, setCategoriaFiltro] = useState("Todas");
   const [tallaFiltro, setTallaFiltro] = useState("Todas");
 
-  // Tasas de cambio Venezuela (Guardadas en el navegador)
   const [tasaBCV, setTasaBCV] = useState<number>(36.5);
   const [tasaParalelo, setTasaParalelo] = useState<number>(40.0);
 
-  // Modal Edit State
   const [modalAbierto, setModalAbierto] = useState(false);
   const [productoEditando, setProductoEditando] = useState<
     (Partial<Producto> & { imagenesTexto?: string }) | null
   >(null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
 
-  // Visor / Galería de fotos State
   const [visorImagenes, setVisorImagenes] = useState<{
     abierto: boolean;
     lista: string[];
@@ -59,13 +56,11 @@ export default function Inventory() {
     titulo: "",
   });
 
-  // Modal Calculadora de Precios State
   const [modalCalcAbierto, setModalCalcAbierto] = useState(false);
   const [calcCosto, setCalcCosto] = useState<number>(10.0);
   const [calcFlete, setCalcFlete] = useState<number>(1.5);
   const [calcMargen, setCalcMargen] = useState<number>(50);
 
-  // Feedback Copiado
   const [mensajeCopiado, setMensajeCopiado] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,7 +111,6 @@ export default function Inventory() {
     await fetchProductos();
   }
 
-  // Función para Subir Fotos Directamente a Supabase Storage
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -129,7 +123,7 @@ export default function Inventory() {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from("product-images")
         .upload(fileName, file, { cacheControl: "3600", upsert: false });
 
@@ -270,7 +264,6 @@ export default function Inventory() {
     setTimeout(() => setMensajeCopiado(null), 3000);
   }
 
-  // Cálculos para la Calculadora de Precios
   const costoTotalBase = (Number(calcCosto) || 0) + (Number(calcFlete) || 0);
   const precioEfectivoUSD =
     costoTotalBase * (1 + (Number(calcMargen) || 0) / 100);
@@ -279,7 +272,6 @@ export default function Inventory() {
     tasaBCV > 0 ? totalBsRequeridos / tasaBCV : precioEfectivoUSD;
   const gananciaNetaUSD = precioEfectivoUSD - costoTotalBase;
 
-  // Filtrado
   const categoriasUnicas = [
     "Todas",
     ...Array.from(new Set(productos.map((p) => p.categoria))),
@@ -320,6 +312,7 @@ export default function Inventory() {
     });
     setModalAbierto(true);
   }
+
   return (
     <AdminShell section={section} onNavigate={setSection}>
       {mensajeCopiado && (
@@ -328,6 +321,7 @@ export default function Inventory() {
           {mensajeCopiado}
         </div>
       )}
+
       <div hidden={section === "Inventario"}>
         <Commerce
           productos={productos}
@@ -338,6 +332,7 @@ export default function Inventory() {
           onNavigate={setSection}
         />
       </div>
+
       <div className="inventory-workspace" hidden={section !== "Inventario"}>
         <div className="inventory-stats">
           <article className="stat-card">
@@ -375,6 +370,7 @@ export default function Inventory() {
             </span>
           </article>
         </div>
+
         <div className="rates-panel">
           <div className="rates-heading">
             <span className="rates-icon">Bs</span>
@@ -419,21 +415,20 @@ export default function Inventory() {
             </button>
           </div>
         </div>
+
         <div className="inventory-section-heading">
           <div>
             <h2>Tu inventario</h2>
             <p>Encontrá, organizá y cuidá cada pieza.</p>
           </div>
           {owner && (
-            <button
-              className="pc-button pc-button-primary"
-              onClick={abrirNuevo}
-            >
+            <button className="pc-button pc-button-primary" onClick={abrirNuevo}>
               <Icon name="plus" size={18} />
               Nuevo producto
             </button>
           )}
         </div>
+
         <div className="inventory-toolbar">
           <label className="search-field">
             <Icon name="search" size={18} />
@@ -476,23 +471,18 @@ export default function Inventory() {
             </button>
           </div>
         </div>
+
         {loadError && (
           <div className="form-error" role="alert">
             {loadError}
-            <button
-              className="subtle-link"
-              onClick={() => void fetchProductos()}
-            >
+            <button className="subtle-link" onClick={() => void fetchProductos()}>
               Reintentar
             </button>
           </div>
         )}
+
         {cargando ? (
-          <div
-            className="inventory-grid"
-            aria-busy="true"
-            aria-label="Cargando inventario"
-          >
+          <div className="inventory-grid" aria-busy="true" aria-label="Cargando inventario">
             {[0, 1, 2].map((n) => (
               <div className="skeleton-card" key={n}>
                 <div />
@@ -504,8 +494,12 @@ export default function Inventory() {
         ) : productosFiltrados.length ? (
           <div className="inventory-grid">
             {productosFiltrados.map((prod) => {
-              const agotado = prod.stock === 0,
-                bajo = prod.stock > 0 && prod.stock <= prod.stock_minimo;
+              const agotado = prod.stock === 0;
+              const bajo = prod.stock > 0 && prod.stock <= prod.stock_minimo;
+              const usd = Number(prod.precio_venta || 0);
+              const bsParalelo = usd * tasaParalelo;
+              const refBcv = tasaBCV > 0 ? bsParalelo / tasaBCV : usd;
+
               return (
                 <article key={prod.id} className="inventory-card">
                   <div className="inventory-photo">
@@ -530,6 +524,7 @@ export default function Inventory() {
                       {(prod.imagenes?.length || 1) === 1 ? "foto" : "fotos"}
                     </span>
                   </div>
+
                   <div className="inventory-card-body">
                     <div className="inventory-card-title">
                       <div>
@@ -555,36 +550,39 @@ export default function Inventory() {
                         </button>
                       )}
                     </div>
+
                     <p className="product-meta">
                       {[prod.talla && `Talla ${prod.talla}`, prod.color]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
-                    
-                    {/* CALCULADORA DUAL VISUAL EN CADA TARJETA */}
-                    <div className="flex flex-col gap-2 w-full my-3">
-                      <div className="flex justify-between items-center bg-emerald-950/30 border border-emerald-800/50 px-3 py-2 rounded-lg">
-                        <small className="text-emerald-400 font-semibold">💵 Efectivo / USDT</small>
-                        <strong className="text-emerald-400 font-mono text-base">${Number(prod.precio_venta || 0).toFixed(2)}</strong>
+
+                    {/* PRECIOS CON ESTÉTICA DE LA PÁGINA */}
+                    <div className="inventory-price">
+                      <div>
+                        <small>💵 Efectivo / USDT</small>
+                        <strong>${usd.toFixed(2)}</strong>
                       </div>
-                      <div className="flex justify-between items-center bg-violet-950/30 border border-violet-800/50 px-3 py-2 rounded-lg">
-                        <div className="flex flex-col">
-                          <small className="text-violet-300 font-semibold">📱 Pago Móvil</small>
-                          <span className="text-[10px] text-gray-400">Ref: ${( (Number(prod.precio_venta || 0) * tasaParalelo) / (tasaBCV || 1) ).toFixed(2)} BCV</span>
-                        </div>
-                        <strong className="text-violet-300 font-mono text-base">Bs {(Number(prod.precio_venta || 0) * tasaParalelo).toFixed(2)}</strong>
+                      <div>
+                        <small>📱 Pago Móvil</small>
+                        <span>Bs {bsParalelo.toFixed(2)}</span>
                       </div>
                     </div>
+                    <p className="inventory-cost" style={{ marginTop: "-4px" }}>
+                      Ref BCV{" "}
+                      <span>${refBcv.toFixed(2)}</span>
+                      {" · "}
+                      Paralelo {tasaParalelo} / BCV {tasaBCV}
+                    </p>
 
                     {owner && (
                       <p className="inventory-cost">
                         Costo unitario{" "}
-                        <span>
-                          ${Number(prod.precio_costo || 0).toFixed(2)}
-                        </span>
+                        <span>${Number(prod.precio_costo || 0).toFixed(2)}</span>
                       </p>
                     )}
-                    <div className="inventory-card-footer mt-2">
+
+                    <div className="inventory-card-footer">
                       <div className="stock-stepper">
                         <span>Stock</span>
                         {owner && (
@@ -634,10 +632,7 @@ export default function Inventory() {
                 : "Agregá tu primer producto para empezar a darle forma a tu colección."}
             </p>
             {owner && !productos.length && (
-              <button
-                className="pc-button pc-button-primary"
-                onClick={abrirNuevo}
-              >
+              <button className="pc-button pc-button-primary" onClick={abrirNuevo}>
                 Agregar producto
                 <Icon name="plus" size={17} />
               </button>
@@ -646,7 +641,6 @@ export default function Inventory() {
         )}
       </div>
 
-      {/* MODAL CALCULADORA */}
       {modalCalcAbierto && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-600/50 rounded-2xl p-6 max-w-lg w-full shadow-[0_0_50px_rgba(139,92,246,0.3)]">
@@ -672,9 +666,7 @@ export default function Inventory() {
                     type="number"
                     step="0.01"
                     value={calcCosto}
-                    onChange={(e) =>
-                      setCalcCosto(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setCalcCosto(parseFloat(e.target.value) || 0)}
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
                   />
                 </div>
@@ -686,9 +678,7 @@ export default function Inventory() {
                     type="number"
                     step="0.01"
                     value={calcFlete}
-                    onChange={(e) =>
-                      setCalcFlete(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setCalcFlete(parseFloat(e.target.value) || 0)}
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
                   />
                 </div>
@@ -700,9 +690,7 @@ export default function Inventory() {
                     type="number"
                     step="1"
                     value={calcMargen}
-                    onChange={(e) =>
-                      setCalcMargen(parseFloat(e.target.value) || 0)
-                    }
+                    onChange={(e) => setCalcMargen(parseFloat(e.target.value) || 0)}
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono text-sm"
                   />
                 </div>
@@ -751,7 +739,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* MODAL VISOR DE FOTOS */}
       {visorImagenes.abierto && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-between p-4 md:p-8 animate-fadeIn">
           <div className="w-full max-w-4xl flex justify-between items-center text-violet-300 border-b border-violet-900/40 pb-4">
@@ -760,14 +747,11 @@ export default function Inventory() {
                 {visorImagenes.titulo}
               </h3>
               <p className="text-xs text-gray-400">
-                Imagen {visorImagenes.indice + 1} de{" "}
-                {visorImagenes.lista.length}
+                Imagen {visorImagenes.indice + 1} de {visorImagenes.lista.length}
               </p>
             </div>
             <button
-              onClick={() =>
-                setVisorImagenes({ ...visorImagenes, abierto: false })
-              }
+              onClick={() => setVisorImagenes({ ...visorImagenes, abierto: false })}
               className="text-2xl text-gray-400 hover:text-violet-400 transition-colors p-2"
             >
               ✕
@@ -780,8 +764,7 @@ export default function Inventory() {
                 onClick={() =>
                   setVisorImagenes((prev) => ({
                     ...prev,
-                    indice:
-                      (prev.indice - 1 + prev.lista.length) % prev.lista.length,
+                    indice: (prev.indice - 1 + prev.lista.length) % prev.lista.length,
                   }))
                 }
                 className="absolute left-2 z-10 bg-black/70 hover:bg-violet-900/80 text-white p-3 rounded-full border border-violet-700/50 transition-colors"
@@ -818,9 +801,7 @@ export default function Inventory() {
                   key={i}
                   src={url}
                   alt={`Thumb ${i}`}
-                  onClick={() =>
-                    setVisorImagenes((prev) => ({ ...prev, indice: i }))
-                  }
+                  onClick={() => setVisorImagenes((prev) => ({ ...prev, indice: i }))}
                   className={`w-14 h-14 object-cover rounded cursor-pointer border-2 transition-all ${
                     i === visorImagenes.indice
                       ? "border-violet-500 scale-105 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
@@ -833,7 +814,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* MODAL EDITAR / AGREGAR PRODUCTO CON SUBIDA DE ARCHIVOS */}
       {modalAbierto && productoEditando && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)] max-h-[90vh] overflow-y-auto">
@@ -852,26 +832,19 @@ export default function Inventory() {
             <form onSubmit={guardarProducto} className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">
-                    SKU
-                  </label>
+                  <label className="text-xs text-violet-300 block mb-1">SKU</label>
                   <input
                     type="text"
                     value={productoEditando.sku || ""}
                     onChange={(e) =>
-                      setProductoEditando({
-                        ...productoEditando,
-                        sku: e.target.value,
-                      })
+                      setProductoEditando({ ...productoEditando, sku: e.target.value })
                     }
                     className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white"
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">
-                    Categoría
-                  </label>
+                  <label className="text-xs text-violet-300 block mb-1">Categoría</label>
                   <input
                     type="text"
                     value={productoEditando.categoria || ""}
@@ -907,9 +880,7 @@ export default function Inventory() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">
-                    Talla
-                  </label>
+                  <label className="text-xs text-violet-300 block mb-1">Talla</label>
                   <input
                     type="text"
                     value={productoEditando.talla || ""}
@@ -923,9 +894,7 @@ export default function Inventory() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">
-                    Color
-                  </label>
+                  <label className="text-xs text-violet-300 block mb-1">Color</label>
                   <input
                     type="text"
                     value={productoEditando.color || ""}
@@ -981,9 +950,7 @@ export default function Inventory() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-violet-300 block mb-1">
-                    Stock Actual
-                  </label>
+                  <label className="text-xs text-violet-300 block mb-1">Stock Actual</label>
                   <input
                     type="number"
                     value={productoEditando.stock ?? 0}
@@ -1014,7 +981,6 @@ export default function Inventory() {
                 </div>
               </div>
 
-              {/* SECCIÓN DE SUBIDA DIRECTA DE FOTOS */}
               <div className="bg-[#0a0a12] p-3 rounded-lg border border-violet-900/40 space-y-2">
                 <label className="text-xs text-violet-300 font-semibold block">
                   📸 Fotos del Producto (Galeria o Cámara):
@@ -1022,9 +988,7 @@ export default function Inventory() {
 
                 <label className="flex items-center justify-center gap-2 bg-violet-950 hover:bg-violet-800 text-violet-200 border border-violet-700/60 p-2.5 rounded-lg cursor-pointer transition-colors text-xs font-semibold">
                   <span>
-                    {subiendoFoto
-                      ? "⏳ Subiendo foto(s)..."
-                      : "📁 Seleccionar Imagen(es)"}
+                    {subiendoFoto ? "⏳ Subiendo foto(s)..." : "📁 Seleccionar Imagen(es)"}
                   </span>
                   <input
                     type="file"
@@ -1036,7 +1000,6 @@ export default function Inventory() {
                   />
                 </label>
 
-                {/* Vistas Previas de las Fotos Adjuntas */}
                 {fotosEnModal.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 pt-2">
                     {fotosEnModal.map((url, index) => (
