@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from 'react'
 import Image from 'next/image'
-import { Search, ShoppingBag, Eye, X, MessageCircle, Instagram, Sparkles, Filter, CheckCircle2, XCircle } from 'lucide-react'
 import { Producto } from '@/lib/supabase'
 
 interface CatalogueProps {
@@ -13,6 +12,77 @@ interface CatalogueProps {
 
 const WS_PHONE = '584129000623'
 const IG_URL = 'https://www.instagram.com/purplekat26'
+
+// --- ICONOS NATIVOS SVG (SIN DEPENDENCIAS EXTERNAS) ---
+const IconSearch = () => (
+  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="8" />
+    <path d="m21 21-4.3-4.3" />
+  </svg>
+)
+
+const IconShoppingBag = () => (
+  <svg className="w-12 h-12 mx-auto text-purple-500/40 mb-3" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+    <path d="M3 6h18" />
+    <path d="M16 10a4 4 0 0 1-8 0" />
+  </svg>
+)
+
+const IconEye = () => (
+  <svg className="w-4 h-4 text-zinc-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+)
+
+const IconX = () => (
+  <svg className="w-6 h-6 text-zinc-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+)
+
+const IconMessageCircle = ({ className = "w-4 h-4 text-emerald-400" }: { className?: string }) => (
+  <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+  </svg>
+)
+
+const IconInstagram = () => (
+  <svg className="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+  </svg>
+)
+
+const IconSparkles = () => (
+  <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+  </svg>
+)
+
+const IconFilter = () => (
+  <svg className="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+)
+
+const IconCheckCircle = () => (
+  <svg className="w-3 h-3 text-emerald-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+)
+
+const IconXCircle = () => (
+  <svg className="w-3 h-3 text-rose-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m15 9-6 6" />
+    <path d="m9 9 6 6" />
+  </svg>
+)
 
 export default function Catalogue({ productos }: CatalogueProps) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -81,7 +151,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
         
         <div className="max-w-4xl mx-auto relative z-10 space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-700/50 text-purple-300 text-xs tracking-widest uppercase">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Catalog Gothic Collection
+            <IconSparkles /> Catalog Gothic Collection
           </div>
           
           <h1 className="text-4xl sm:text-6xl font-serif tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-zinc-100 to-purple-400 drop-shadow-[0_2px_10px_rgba(168,85,247,0.3)]">
@@ -99,7 +169,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-950/80 border border-emerald-600/50 text-emerald-300 hover:bg-emerald-900/60 transition text-sm font-medium"
             >
-              <MessageCircle className="w-4 h-4 text-emerald-400" /> WhatsApp Directo
+              <IconMessageCircle /> WhatsApp Directo
             </a>
             <a
               href={IG_URL}
@@ -107,7 +177,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-pink-950/60 border border-pink-700/50 text-pink-300 hover:bg-pink-900/60 transition text-sm font-medium"
             >
-              <Instagram className="w-4 h-4 text-pink-400" /> @purplekat26
+              <IconInstagram /> @purplekat26
             </a>
           </div>
         </div>
@@ -120,7 +190,9 @@ export default function Catalogue({ productos }: CatalogueProps) {
         <div className="bg-[#161625] border border-purple-900/30 rounded-2xl p-5 mb-10 shadow-xl space-y-4">
           
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-purple-400" />
+            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+              <IconSearch />
+            </div>
             <input
               type="text"
               placeholder="Buscar por nombre, SKU o descripción..."
@@ -134,7 +206,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
             {/* Categorías */}
             <div>
               <label className="block text-xs font-semibold text-purple-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5" /> Categoría
+                <IconFilter /> Categoría
               </label>
               <select
                 value={selectedCategory}
@@ -200,7 +272,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
         {/* GRILLA DE PRODUCTOS */}
         {filteredProducts.length === 0 ? (
           <div className="text-center py-20 bg-[#161625]/50 rounded-2xl border border-purple-900/20">
-            <ShoppingBag className="w-12 h-12 mx-auto text-purple-500/40 mb-3" />
+            <IconShoppingBag />
             <h3 className="text-xl font-medium text-zinc-300">No se encontraron productos</h3>
             <p className="text-zinc-500 text-sm mt-1">Prueba ajustando los filtros de búsqueda.</p>
           </div>
@@ -232,18 +304,18 @@ export default function Catalogue({ productos }: CatalogueProps) {
                         className="absolute top-3 right-3 p-2 bg-black/70 hover:bg-purple-900/80 border border-purple-500/40 rounded-full text-zinc-200 transition opacity-0 group-hover:opacity-100"
                         title="Ver imagen completa"
                       >
-                        <Eye className="w-4 h-4" />
+                        <IconEye />
                       </button>
 
                       {/* BADGE DE STOCK */}
                       <div className="absolute top-3 left-3">
                         {inStock ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-semibold backdrop-blur-md">
-                            <CheckCircle2 className="w-3 h-3" /> Disponible
+                            <IconCheckCircle /> Disponible
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs font-semibold backdrop-blur-md">
-                            <XCircle className="w-3 h-3" /> Agotado
+                            <IconXCircle /> Agotado
                           </span>
                         )}
                       </div>
@@ -304,7 +376,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                       rel="noopener noreferrer"
                       className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-purple-900/40 border border-purple-500/50 hover:bg-purple-600 hover:border-purple-500 text-purple-200 hover:text-white font-medium text-sm transition-all duration-200 group-hover:shadow-lg group-hover:shadow-purple-900/30"
                     >
-                      <MessageCircle className="w-4 h-4 text-emerald-400 group-hover:text-white" />
+                      <IconMessageCircle className="w-4 h-4 text-emerald-400 group-hover:text-white" />
                       Consultar precio
                     </a>
                   </div>
@@ -324,7 +396,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
               onClick={() => setSelectedImage(null)}
               className="absolute -top-12 right-0 p-2 text-zinc-400 hover:text-white bg-zinc-900/80 rounded-full border border-zinc-700"
             >
-              <X className="w-6 h-6" />
+              <IconX />
             </button>
             <div className="relative w-full h-[75vh]">
               <Image
