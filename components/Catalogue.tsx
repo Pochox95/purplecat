@@ -2,12 +2,28 @@
 
 import React, { useState, useMemo } from 'react'
 import Image from 'next/image'
-import { Producto } from '@/lib/supabase'
+
+// Definición estricta de tipo Producto interna para evitar errores de importación
+export interface Producto {
+  id: string
+  sku: string
+  nombre: string
+  descripcion?: string | null
+  categoria?: string | null
+  precio_costo?: number
+  precio_venta: number
+  stock: number
+  tallas?: string[] | null
+  colores?: string[] | null
+  imagen_url?: string | null
+  imagenes?: string[] | null
+  created_at?: string
+}
 
 interface CatalogueProps {
-  productos: Producto[]
-  tasaBCV: number
-  tasaParalelo: number
+  productos?: Producto[]
+  tasaBCV?: number
+  tasaParalelo?: number
 }
 
 const WS_PHONE = '584129000623'
@@ -84,7 +100,7 @@ const IconXCircle = () => (
   </svg>
 )
 
-export default function Catalogue({ productos }: CatalogueProps) {
+export default function Catalogue({ productos = [] }: CatalogueProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('todas')
   const [selectedSize, setSelectedSize] = useState<string>('todas')
@@ -97,15 +113,15 @@ export default function Catalogue({ productos }: CatalogueProps) {
   // Extraer categorías, tallas y colores únicos de la base de datos
   const categories = useMemo(() => {
     const cats = new Set<string>()
-    productos.forEach(p => { if (p.categoria) cats.add(p.categoria) })
+    productos.forEach((p: Producto) => { if (p.categoria) cats.add(p.categoria) })
     return Array.from(cats).sort()
   }, [productos])
 
   const sizes = useMemo(() => {
     const szs = new Set<string>()
-    productos.forEach(p => {
+    productos.forEach((p: Producto) => {
       if (p.tallas && Array.isArray(p.tallas)) {
-        p.tallas.forEach(t => szs.add(t))
+        p.tallas.forEach((t: string) => szs.add(t))
       }
     })
     return Array.from(szs).sort()
@@ -113,9 +129,9 @@ export default function Catalogue({ productos }: CatalogueProps) {
 
   const colors = useMemo(() => {
     const cls = new Set<string>()
-    productos.forEach(p => {
+    productos.forEach((p: Producto) => {
       if (p.colores && Array.isArray(p.colores)) {
-        p.colores.forEach(c => cls.add(c))
+        p.colores.forEach((c: string) => cls.add(c))
       }
     })
     return Array.from(cls).sort()
@@ -123,7 +139,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
 
   // Filtrado de productos
   const filteredProducts = useMemo(() => {
-    return productos.filter(product => {
+    return productos.filter((product: Producto) => {
       const matchSearch = product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -214,7 +230,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                 className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
               >
                 <option value="todas">Todas las categorías</option>
-                {categories.map(c => (
+                {categories.map((c: string) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
@@ -231,7 +247,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                 className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
               >
                 <option value="todas">Todas las tallas</option>
-                {sizes.map(s => (
+                {sizes.map((s: string) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -248,7 +264,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                 className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
               >
                 <option value="todos">Todos los colores</option>
-                {colors.map(col => (
+                {colors.map((col: string) => (
                   <option key={col} value={col}>{col}</option>
                 ))}
               </select>
@@ -278,7 +294,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map((p) => {
+            {filteredProducts.map((p: Producto) => {
               const inStock = p.stock > 0
               const mainImg = p.imagen_url || (p.imagenes && p.imagenes[0]) || '/placeholder.png'
 
@@ -346,7 +362,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                         {p.tallas && p.tallas.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-zinc-500 font-medium">Tallas:</span>
-                            {p.tallas.map(t => (
+                            {p.tallas.map((t: string) => (
                               <span key={t} className="px-1.5 py-0.5 rounded bg-purple-950/60 border border-purple-800/40 text-purple-200 font-mono text-[11px]">
                                 {t}
                               </span>
@@ -357,7 +373,7 @@ export default function Catalogue({ productos }: CatalogueProps) {
                         {p.colores && p.colores.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-zinc-500 font-medium">Colores:</span>
-                            {p.colores.map(c => (
+                            {p.colores.map((c: string) => (
                               <span key={c} className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/50 text-zinc-300 text-[11px]">
                                 {c}
                               </span>
