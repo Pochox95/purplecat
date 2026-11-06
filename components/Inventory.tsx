@@ -61,6 +61,18 @@ export default function Inventory() {
   const [calcFlete, setCalcFlete] = useState<number>(1.5);
   const [calcMargen, setCalcMargen] = useState<number>(50);
 
+  const [reposicion, setReposicion] = useState<Producto | null>(null);
+  const [costoReposicion, setCostoReposicion] = useState<number>(0);
+  const [alertaReposicion, setAlertaReposicion] = useState<null | {
+    id: number;
+    tipo: "caro" | "barato";
+    nombre: string;
+    anterior: number;
+    nuevo: number;
+    precioActual: number;
+    precioSugerido: number | null;
+  }>(null);
+
   const [mensajeCopiado, setMensajeCopiado] = useState<string | null>(null);
 
   useEffect(() => {
@@ -108,6 +120,81 @@ export default function Inventory() {
       delta,
     });
     if (error) alert(error.message);
+    await fetchProductos();
+  }
+
+  function abrirReposicion(prod: Producto) {
+    setCostoReposicion(Number(prod.precio_costo || 0));
+    setReposicion(prod);
+  }
+
+  async function confirmarReposicion() {
+    const prod = reposicion;
+    if (!prod) return;
+    const anterior = Number(prod.precio_costo || 0);
+    const nuevo = Math.max(0, Number(costoReposicion) || 0);
+
+    const { error } = await supabase.rpc("pc_ajustar_stock", {
+      producto: prod.id,
+      delta: 1,
+    });
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    if (Math.abs(nuevo - anterior) > 0.001) {
+      // El último costo de compra pasa a ser el costo vigente
+      await supabase
+        .from("productos")
+        .update({ precio_costo: nuevo })
+        .eq("id", prod.id);
+    }
+    const precioActual = Number(prod.precio_venta || 0);
+    // Precio sugerido manteniendo el factor precio/costo anterior
+    const precioSugerido =
+      anterior > 0 && precioActual > 0
+        ? Math.round(((precioActual / anterior) * nuevo + Number.EPSILON) * 100) / 100
+        : null;
+    if (nuevo > anterior + 0.001) {
+      setAlertaReposicion({
+        id: prod.id,
+        tipo: "caro",
+        nombre: prod.nombre,
+        anterior,
+        nuevo,
+        precioActual,
+        precioSugerido,
+      });
+    } else if (nuevo < anterior - 0.001) {
+      setAlertaReposicion({
+        id: prod.id,
+        tipo: "barato",
+        nombre: prod.nombre,
+        anterior,
+        nuevo,
+        precioActual,
+        precioSugerido,
+      });
+    }
+    setReposicion(null);
+    await fetchProductos();
+  }
+
+  async function aplicarPrecioSugerido() {
+    if (!alertaReposicion?.precioSugerido) return;
+    const { error } = await supabase
+      .from("productos")
+      .update({ precio_venta: alertaReposicion.precioSugerido })
+      .eq("id", alertaReposicion.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setMensajeCopiado(
+      `Precio de ${alertaReposicion.nombre} actualizado a $${alertaReposicion.precioSugerido.toFixed(2)}`,
+    );
+    setTimeout(() => setMensajeCopiado(null), 3000);
+    setAlertaReposicion(null);
     await fetchProductos();
   }
 
@@ -257,7 +344,7 @@ export default function Inventory() {
     const totalBs = usdEfectivo * tasaParalelo;
     const usdBcv = tasaBCV > 0 ? totalBs / tasaBCV : usdEfectivo;
 
-    const texto = `✨ *${prod.nombre}* ✨\n\n💵 Precio Efectivo / USDT: *$${usdEfectivo.toFixed(2)}*\n💳 Pago Móvil (Tasa BCV): *Bs. ${totalBs.toFixed(2)}* (Ref. $${usdBcv.toFixed(2)} BCV)\n\n📌 Talla: ${prod.talla} | Color: ${prod.color}`;
+    const texto = `✨ *${prod.nombre}* ✨\n\nREF *$${usdEfectivo.toFixed(2)}*\n💳 Pago Móvil (Tasa BCV): *Bs. ${totalBs.toFixed(2)}* (Ref. $${usdBcv.toFixed(2)} BCV)\n\n📌 Talla: ${prod.talla} | Color: ${prod.color}`;
 
     navigator.clipboard.writeText(texto);
     setMensajeCopiado(`¡Copiado precio de ${prod.nombre}!`);
@@ -319,6 +406,64 @@ export default function Inventory() {
         <div className="pc-toast" role="status">
           <Icon name="check" size={18} />
           {mensajeCopiado}
+        </div>
+      )}
+
+      {alertaReposicion && (
+        <div
+          role="alert"
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-lg w-[calc(100%-2rem)] rounded-2xl border p-4 shadow-[0_0_35px_rgba(0,0,0,0.5)] ${
+            alertaReposicion.tipo === "caro"
+              ? "bg-red-950/95 border-red-700/60"
+              : "bg-emerald-950/95 border-emerald-700/60"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">{alertaReposicion.tipo === "caro" ? "⚠️" : "✅"}</span>
+            <div className="space-y-1 text-sm">
+              <p className="font-bold text-base">
+                {alertaReposicion.tipo === "caro"
+                  ? `Lo compraste más caro: ${alertaReposicion.nombre}`
+                  : `Lo compraste más barato: ${alertaReposicion.nombre}`}
+              </p>
+              <p className="text-zinc-200">
+                Costo anterior ${alertaReposicion.anterior.toFixed(2)} → ahora $
+                {alertaReposicion.nuevo.toFixed(2)} ({" "}
+                {alertaReposicion.tipo === "caro" ? "+" : "−"}$
+                {Math.abs(
+                  alertaReposicion.nuevo - alertaReposicion.anterior,
+                ).toFixed(2)}{" "}
+                por unidad)
+              </p>
+              <p className="text-zinc-300">
+                Precio de venta actual: ${alertaReposicion.precioActual.toFixed(2)}
+                {alertaReposicion.precioSugerido !== null && (
+                  <>
+                    {" "}· Sugerido manteniendo el margen:{" "}
+                    <strong>
+                      ${alertaReposicion.precioSugerido.toFixed(2)}
+                    </strong>
+                  </>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-2">
+                {alertaReposicion.precioSugerido !== null && (
+                  <button
+                    className="pc-button pc-button-primary"
+                    onClick={() => void aplicarPrecioSugerido()}
+                  >
+                    Aplicar ${alertaReposicion.precioSugerido.toFixed(2)}
+                  </button>
+                )}
+                <button
+                  className="pc-button pc-button-quiet"
+                  onClick={() => setAlertaReposicion(null)}
+                >
+                  Mantener ${alertaReposicion.precioActual.toFixed(2)}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -598,7 +743,7 @@ export default function Inventory() {
                         {owner && (
                           <button
                             aria-label={`Sumar stock de ${prod.nombre}`}
-                            onClick={() => void ajustarStock(prod.id, 1)}
+                            onClick={() => abrirReposicion(prod)}
                           >
                             +
                           </button>
@@ -640,6 +785,90 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      {reposicion && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reposición de stock"
+        >
+          <div className="bg-[#161625] border border-violet-700/50 rounded-2xl p-6 max-w-md w-full shadow-[0_0_40px_rgba(139,92,246,0.3)]">
+            <div className="flex justify-between items-center mb-5 border-b border-violet-900/40 pb-3">
+              <h3 className="text-xl font-serif text-violet-400">
+                Reposición de stock
+              </h3>
+              <button
+                onClick={() => setReposicion(null)}
+                className="text-gray-400 hover:text-white text-xl"
+                aria-label="Cancelar reposición"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-violet-300 font-semibold">{reposicion.nombre}</p>
+                <p className="text-zinc-400 text-xs">
+                  SKU {reposicion.sku} · Stock actual: {reposicion.stock}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-[#0a0a12] rounded-lg border border-violet-900/40 p-3">
+                  <p className="text-[11px] text-violet-300 uppercase tracking-wider">
+                    Costo anterior
+                  </p>
+                  <p className="font-mono text-lg text-white">
+                    ${Number(reposicion.precio_costo || 0).toFixed(2)}
+                  </p>
+                </div>
+                <div className="bg-[#0a0a12] rounded-lg border border-violet-900/40 p-3">
+                  <p className="text-[11px] text-violet-300 uppercase tracking-wider">
+                    Precio de venta
+                  </p>
+                  <p className="font-mono text-lg text-white">
+                    ${Number(reposicion.precio_venta || 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-violet-300 block mb-1">
+                  ¿A qué costo compraste esta reposición? ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  autoFocus
+                  value={costoReposicion}
+                  onChange={(e) =>
+                    setCostoReposicion(parseFloat(e.target.value) || 0)
+                  }
+                  className="w-full bg-[#0a0a12] border border-violet-900/50 rounded p-2 text-white font-mono"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Si subió o bajó, te avisamos para que ajustes el precio de
+                  venta. Se agrega 1 unidad al stock.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2 border-t border-violet-900/40">
+                <button
+                  onClick={() => void confirmarReposicion()}
+                  className="flex-1 bg-violet-800 hover:bg-violet-700 text-white py-2 rounded-lg font-semibold transition-colors"
+                >
+                  Confirmar reposición
+                </button>
+                <button
+                  onClick={() => setReposicion(null)}
+                  className="px-4 py-2 rounded-lg border border-violet-900/50 text-zinc-300 hover:text-white transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalCalcAbierto && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">

@@ -23,7 +23,7 @@ type Item = {
   precio: number;
   descuento: number;
 };
-type Sale = {
+type Sale = MetodosVenta & {
   id: number;
   created_at: string;
   cliente_nombre: string;
@@ -56,6 +56,25 @@ type Audit = {
   despues: unknown;
 };
 type Profile = { id: string; nombre: string; rol: string };
+type PagoMixto = {
+  metodo: string;
+  moneda: "USD" | "BS";
+  monto: number;
+  monto_usd: number;
+  referencia: string | null;
+};
+const METODOS_PAGO: { id: string; moneda: "USD" | "BS" }[] = [
+  { id: "Binance USDT", moneda: "USD" },
+  { id: "Pago Móvil", moneda: "BS" },
+  { id: "Zelle", moneda: "USD" },
+  { id: "PayPal", moneda: "USD" },
+];
+const ENTREGA_RETIRO = "Retiro en tienda";
+const ENTREGA_NACIONAL = "Envío nacional";
+type MetodosVenta = {
+  metodo_entrega?: string;
+  metodos_pago?: PagoMixto[] | null;
+};
 const field = "pc-field";
 const button = "pc-button pc-button-quiet";
 async function allRows(table: string, columns = "*") {
@@ -116,6 +135,49 @@ export default function Commerce({
     [reason, setReason] = useState("");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [seen, setSeen] = useState<string[]>([]);
+  const [metodoEntrega, setMetodoEntrega] = useState(ENTREGA_RETIRO),
+    [pagos, setPagos] = useState<PagoMixto[]>([]),
+    [metodoSeleccionado, setMetodoSeleccionado] =
+      useState<string>("Binance USDT"),
+    [montoPagoInput, setMontoPagoInput] = useState(""),
+    [referenciaInput, setReferenciaInput] = useState("");
+  const envioNacional = metodoEntrega === ENTREGA_NACIONAL;
+  const metodoInfo =
+    METODOS_PAGO.find((m) => m.id === metodoSeleccionado) ?? METODOS_PAGO[0];
+  const envioValido =
+    !envioNacional ||
+    Boolean(
+      customer.nombre.trim() &&
+        customer.cedula.trim() &&
+        customer.telefono.trim() &&
+        customer.direccion.trim(),
+    );
+  const agregarPago = () => {
+    const monto = Number(montoPagoInput);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setMessage("Ingresá un monto de pago válido (mayor a cero).");
+      return;
+    }
+    const montoUsd =
+      metodoInfo.moneda === "BS"
+        ? tasaParalelo > 0
+          ? monto / tasaParalelo
+          : monto
+        : monto;
+    setPagos([
+      ...pagos,
+      {
+        metodo: metodoInfo.id,
+        moneda: metodoInfo.moneda,
+        monto: Math.round(monto * 100) / 100,
+        monto_usd: Math.round(montoUsd * 100) / 100,
+        referencia: referenciaInput.trim() ? referenciaInput.trim() : null,
+      },
+    ]);
+    setMontoPagoInput("");
+    setReferenciaInput("");
+    setMessage("");
+  };
   const alerts = productos.filter(
     (p) => p.stock <= p.stock_minimo && !seen.includes(`${p.id}:${p.stock}`),
   );
@@ -131,6 +193,10 @@ export default function Commerce({
   } catch (e) {
     invalid = (e as Error).message;
   }
+  const pagosTotal =
+    Math.round(pagos.reduce((s, p) => s + p.monto_usd, 0) * 100) / 100;
+  const saldoPago = Math.round((total - pagosTotal) * 100) / 100;
+  const pagoCuadra = Math.abs(saldoPago) <= 0.01;
   async function load() {
     const { data, error } = await supabase.rpc("app_role");
     if (error) throw error;
@@ -256,6 +322,14 @@ export default function Commerce({
                 bcv: tasaBCV,
                 paralelo: tasaParalelo,
                 solicitud: requestId,
+                entrega: metodoEntrega,
+                pagos: pagos.map((p) => ({
+                  metodo: p.metodo,
+                  moneda: p.moneda,
+                  monto: p.monto,
+                  monto_usd: p.monto_usd,
+                  referencia: p.referencia,
+                })),
               });
               if (error) throw error;
               setRequestId(crypto.randomUUID());
@@ -267,6 +341,8 @@ export default function Commerce({
                 cedula: "",
                 direccion: "",
               });
+              setPagos([]);
+              setMetodoEntrega(ENTREGA_RETIRO);
               setMessage(`Venta #${data} registrada`);
               await refresh();
               await load();
@@ -288,17 +364,41 @@ export default function Commerce({
                       direccion: "Dirección",
                     }[key]
                   }
+                  {envioNacional && <em className="text-amber-400"> *</em>}
                   <input
                     className={field}
-                    required={key === "nombre"}
+                    required={key === "nombre" || envioNacional}
                     maxLength={250}
                     value={customer[key]}
                     onChange={(e) =>
                       setCustomer({ ...customer, [key]: e.target.value })
                     }
+                    aria-invalid={
+                      envioNacional && !customer[key].trim() ? true : undefined
+                    }
                   />
                 </label>
               ),
+            )}
+          </div>
+          <div className="grid md:grid-cols-2 gap-3 items-end">
+            <label>
+              Tipo de entrega
+              <select
+                className={field}
+                value={metodoEntrega}
+                onChange={(e) => setMetodoEntrega(e.target.value)}
+                aria-label="Tipo de entrega"
+              >
+                <option value={ENTREGA_RETIRO}>Retiro en tienda</option>
+                <option value={ENTREGA_NACIONAL}>Envío nacional</option>
+              </select>
+            </label>
+            {envioNacional && (
+              <p className="text-xs text-amber-300 border border-amber-800 rounded-lg p-2">
+                Envío nacional: nombre, cédula/RIF, teléfono y dirección son
+                obligatorios para emitir la factura.
+              </p>
             )}
           </div>
           <label>
@@ -411,6 +511,105 @@ export default function Commerce({
               onChange={(e) => setDiscount(Number(e.target.value))}
             />
           </label>
+          <fieldset className="grid gap-3 border border-violet-900/60 rounded-lg p-3">
+            <legend className="px-1 font-semibold text-violet-200">
+              💳 Métodos de pago (mixto)
+            </legend>
+            <div className="grid md:grid-cols-4 gap-3 items-end">
+              <label>
+                Método
+                <select
+                  className={field}
+                  value={metodoSeleccionado}
+                  onChange={(e) => setMetodoSeleccionado(e.target.value)}
+                >
+                  {METODOS_PAGO.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Monto{" "}
+                {metodoInfo.moneda === "BS"
+                  ? `(Bs · 1 $ = ${tasaParalelo} Bs)`
+                  : "($)"}
+                <input
+                  className={field}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={montoPagoInput}
+                  onChange={(e) => setMontoPagoInput(e.target.value)}
+                  placeholder={
+                    metodoInfo.moneda === "BS" ? "Bs 0.00" : "$0.00"
+                  }
+                  aria-label="Monto del pago"
+                />
+              </label>
+              <label>
+                Referencia (opcional)
+                <input
+                  className={field}
+                  maxLength={120}
+                  value={referenciaInput}
+                  onChange={(e) => setReferenciaInput(e.target.value)}
+                  placeholder="N° de operación"
+                />
+              </label>
+              <button
+                type="button"
+                className={button}
+                onClick={agregarPago}
+              >
+                Agregar pago
+              </button>
+            </div>
+            {pagos.length > 0 && (
+              <ul className="grid gap-1 text-sm">
+                {pagos.map((p, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-900/40 py-1"
+                  >
+                    <span>
+                      {p.metodo}
+                      {p.moneda === "BS" &&
+                        ` · Bs ${money(p.monto)} (≈ $${money(p.monto_usd)})`}
+                      {p.moneda === "USD" && ` · $${money(p.monto)}`}
+                      {p.referencia && (
+                        <small className="text-zinc-400"> · Ref: {p.referencia}</small>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="underline text-red-300"
+                      onClick={() => setPagos(pagos.filter((_, j) => j !== i))}
+                      aria-label={`Quitar pago ${p.metodo}`}
+                    >
+                      Quitar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-sm">
+              Total factura: <strong>${money(total)}</strong> · Pagado: $
+              {money(pagosTotal)} ·{" "}
+              {pagoCuadra ? (
+                <span className="text-emerald-400">✓ Pagos cuadrados</span>
+              ) : saldoPago > 0 ? (
+                <span className="text-amber-300">
+                  Pendiente: ${money(saldoPago)}
+                </span>
+              ) : (
+                <span className="text-red-300">
+                  Pagado de más: ${money(Math.abs(saldoPago))}
+                </span>
+              )}
+            </p>
+          </fieldset>
           <p>
             Subtotal: ${money(subtotal)} · Total:{" "}
             <strong>${money(total)}</strong> · Bs {money(total * tasaParalelo)}{" "}
@@ -419,10 +618,25 @@ export default function Commerce({
           {invalid && <p role="alert">{invalid}</p>}
           <button
             className={button}
-            disabled={busy || !cart.length || Boolean(invalid) || !role}
+            disabled={
+              busy ||
+              !cart.length ||
+              Boolean(invalid) ||
+              !role ||
+              !pagoCuadra ||
+              !envioValido
+            }
           >
             {busy ? "Procesando…" : "Registrar venta"}
           </button>
+          {(!pagoCuadra || !envioValido) && cart.length > 0 && (
+            <p className="text-xs text-amber-300" role="status">
+              {!pagoCuadra &&
+                "Los pagos deben sumar exactamente el total de la factura. "}
+              {!envioValido &&
+                "Para envío nacional completá nombre, cédula/RIF, teléfono y dirección."}
+            </p>
+          )}
         </form>
       )}
       {tab === "Ventas" && (
@@ -464,6 +678,13 @@ export default function Commerce({
                     tasa_bcv: sale.tasa_bcv,
                     tasa_paralelo: sale.tasa_paralelo,
                     total_bs: Number(sale.total) * Number(sale.tasa_paralelo),
+                    metodo_entrega: sale.metodo_entrega ?? "Retiro en tienda",
+                    metodos_pago: (sale.metodos_pago ?? [])
+                      .map(
+                        (p) =>
+                          `${p.metodo} $${money(p.monto_usd)}${p.referencia ? ` (ref ${p.referencia})` : ""}`,
+                      )
+                      .join(" | "),
                     motivo_devolucion: sale.motivo_devolucion,
                   })),
                 );
@@ -484,6 +705,15 @@ export default function Commerce({
                 <small>
                   {new Date(s.created_at).toLocaleString("es-VE")}
                   {s.motivo_devolucion && ` · ${s.motivo_devolucion}`}
+                </small>
+                <br />
+                <small>
+                  🚚 {s.metodo_entrega ?? "Retiro en tienda"}
+                  {s.metodos_pago && s.metodos_pago.length > 0
+                    ? ` · 💳 ${s.metodos_pago
+                        .map((p) => `${p.metodo} $${money(p.monto_usd)}`)
+                        .join(" + ")}`
+                    : ""}
                 </small>
               </div>
               <div className="flex gap-2">
@@ -736,6 +966,9 @@ export default function Commerce({
                 <br />
                 {receipt.cliente_direccion}
               </p>
+              <p>
+                Tipo de entrega: {receipt.metodo_entrega ?? "Retiro en tienda"}
+              </p>
               <table className="w-full my-6">
                 <thead>
                   <tr>
@@ -770,14 +1003,23 @@ export default function Commerce({
                 </tbody>
               </table>
               <p>Descuento adicional: ${money(receipt.descuento)}</p>
-              <p className="text-xl">
-                Total: ${money(receipt.total)} · Bs{" "}
-                {money(Number(receipt.total) * Number(receipt.tasa_paralelo))}
-              </p>
-              <p>
-                Tasas registradas: BCV {receipt.tasa_bcv} · Paralelo{" "}
-                {receipt.tasa_paralelo}
-              </p>
+              {receipt.metodos_pago && receipt.metodos_pago.length > 0 && (
+                <div>
+                  <p className="font-bold">Desglose de pagos:</p>
+                  <ul>
+                    {receipt.metodos_pago.map((p, i) => (
+                      <li key={i}>
+                        • {p.metodo}
+                        {p.moneda === "BS"
+                          ? ` · Bs ${money(p.monto)}`
+                          : ` · $${money(p.monto_usd)}`}
+                        {p.referencia && ` · Ref: ${p.referencia}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-xl">Total: ${money(receipt.total)}</p>
               {receipt.motivo_devolucion && (
                 <p>Devolución: {receipt.motivo_devolucion}</p>
               )}

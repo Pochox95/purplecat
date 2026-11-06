@@ -26,6 +26,8 @@ const paths = {
   download: "M12 3v12 m-5-5 5 5 5-5 M4 16v5h16v-5",
   refresh:
     "M20 7a9 9 0 0 0-15-2L2 8 M2 3v5h5 M4 17a9 9 0 0 0 15 2l3-3 M22 21v-5h-5",
+  instagram:
+    "M5.5 2h13A3.5 3.5 0 0 1 22 5.5v13a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 18.5v-13A3.5 3.5 0 0 1 5.5 2z M15.6 11.7a3.9 3.9 0 1 1-7.6.8 3.9 3.9 0 0 1 7.6-.8z M17.4 6.6h.01",
 } as const;
 export type IconName = keyof typeof paths;
 export default function Icon({

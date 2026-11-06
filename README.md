@@ -37,14 +37,15 @@ insert into public.perfiles(id,nombre,rol) values
  ('UUID-DEL-EMPLEADO', 'Empleado', 'empleado');
 ```
 
-5. Configurá las mismas variables de `.env.example` en Vercel y reconstruí el despliegue. El login queda bloqueado hasta tener un perfil válido. El dueño puede cambiar roles de otras cuentas desde Usuarios; no puede quitarse su propio rol.
-6. Opcionalmente habilitá `productos` en la publicación `supabase_realtime`. Las alertas en la aplicación usan Realtime y, como respaldo, consultan cada minuto. No son notificaciones push ni funcionan con la aplicación cerrada.
+5. Si usás pagos mixtos y envío nacional, ejecutá **una vez** `supabase/migrations/202611060001_entrega_pagos.sql` desde SQL Editor. Agrega a `pc_ventas` las columnas `metodo_entrega` y `metodos_pago` (jsonb) y reemplaza `pc_crear_venta`: exige que la suma de los pagos en USD cuadre con el total de la factura (tolerancia 1 centavo) y que una venta con entrega "Envío nacional" tenga nombre, cédula/RIF, teléfono y dirección. Las ventas anteriores conservan el valor por defecto (`Retiro en tienda`, `[]` pagos).
+6. Configurá las mismas variables de `.env.example` en Vercel y reconstruí el despliegue. El login queda bloqueado hasta tener un perfil válido. El dueño puede cambiar roles de otras cuentas desde Usuarios; no puede quitarse su propio rol.
+7. Opcionalmente habilitá `productos` en la publicación `supabase_realtime`. Las alertas en la aplicación usan Realtime y, como respaldo, consultan cada minuto. No son notificaciones push ni funcionan con la aplicación cerrada.
 
 **Las migraciones se entregan en GitHub. Su aplicación al Supabase real y el estado del despliegue en Vercel deben verificarse por separado.**
 
 ## Funciones
 
-- Facturar: cliente con nombre, teléfono, cédula/RIF y dirección; descuentos en dólares por línea y adicional por factura. El servidor toma los precios del inventario, valida stock y registra la venta completa en una transacción. Un identificador de solicitud evita duplicar la venta al reintentar la misma petición.
+- Facturar: cliente con nombre, teléfono, cédula/RIF y dirección; tipo de entrega (`Retiro en tienda` / `Envío nacional`; en envío nacional los datos del cliente son obligatorios en el formulario y en el servidor); pagos mixtos desglosados (Binance USDT, Pago Móvil en Bs convertido a la tasa paralelo, Zelle y PayPal) cuya suma debe cuadrar con el total de la factura; descuentos en dólares por línea y adicional por factura. El servidor toma los precios del inventario, valida stock y registra la venta completa en una transacción. Un identificador de solicitud evita duplicar la venta al reintentar la misma petición.
 - Ventas: historial, comprobante imprimible y «Guardar como PDF» mediante el diálogo de impresión del navegador. Se conservan las tasas BCV y paralelo usadas en cada venta. El equivalente en bolívares usa el paralelo, igual que la copia de precios del inventario; el precio en dólares es el efectivo. Es un comprobante comercial; no integra un proveedor fiscal.
 - Devolución/anulación: solo dueño, venta **completa**, motivo obligatorio, restaura todo el stock una sola vez. Conserva la venta y la auditoría; el reembolso del dinero se realiza fuera de la aplicación. No hay devoluciones parciales.
 - Gastos: envíos, empaque, comisiones y otros, importes en USD y fecha de operación. Disponibles solo al dueño.
