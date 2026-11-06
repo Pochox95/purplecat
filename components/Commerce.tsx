@@ -1,805 +1,715 @@
-"use client";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { supabase } from "../lib/supabase";
-import {
-  downloadCSV,
-  lineTotal,
-  money,
-  totalWithDiscount,
-} from "../lib/commerce";
-type Product = {
-  id: number;
-  nombre: string;
-  sku: string;
-  precio_venta: number;
-  stock: number;
-  stock_minimo: number;
-};
-type Item = {
-  producto_id: number;
-  nombre: string;
-  cantidad: number;
-  precio: number;
-  descuento: number;
-};
-type Sale = {
-  id: number;
-  created_at: string;
-  cliente_nombre: string;
-  cliente_telefono: string;
-  cliente_cedula: string;
-  cliente_direccion: string;
-  total: number;
-  descuento: number;
-  tasa_bcv: number;
-  tasa_paralelo: number;
-  estado: string;
-  motivo_devolucion: string | null;
-  pc_venta_items: Item[];
-};
-type Expense = {
-  id: number;
-  fecha: string;
-  concepto: string;
-  categoria: string;
-  monto: number;
-};
-type Audit = {
-  id: number;
-  created_at: string;
-  usuario: string;
-  tabla: string;
-  accion: string;
-  registro_id: string;
-  antes: unknown;
-  despues: unknown;
-};
-type Profile = { id: string; nombre: string; rol: string };
-const field = "pc-field";
-const button = "pc-button pc-button-quiet";
-async function allRows(table: string, columns = "*") {
-  const rows: any[] = [];
-  let lastId: number | null = null;
-  while (true) {
-    let query = supabase
-      .from(table)
-      .select(columns)
-      .order("id", { ascending: false })
-      .limit(500);
-    if (lastId !== null) query = query.lt("id", lastId);
-    const { data, error } = await query;
-    if (error) throw error;
-    rows.push(...(data || []));
-    if (!data || data.length < 500) return rows;
-    lastId = (data[data.length - 1] as any).id;
-  }
+'use client'
+
+import React, { useState, useMemo } from 'react'
+import { Producto, Sale, supabase } from '@/lib/supabase'
+
+interface CommerceProps {
+  productos: Producto[]
+  sales: Sale[]
+  tasaBCV: number
+  tasaParalelo: number
+  onRefreshData: () => void
 }
+
+interface ItemCarrito {
+  producto: Producto
+  cantidad: number
+  precioAplicadoUSD: number
+}
+
+interface PagoDesglosado {
+  id: string
+  metodo: string
+  montoUSD: number
+  montoBs: number
+  referencia?: string
+}
+
+const METODOS_PAGO = [
+  { id: 'Efectivo $', nombre: 'Efectivo ($ USD)', moneda: 'USD' },
+  { id: 'Pago Móvil (Bs)', nombre: 'Pago Móvil (Bs)', moneda: 'BS' },
+  { id: 'Efectivo (Bs)', nombre: 'Efectivo (Bs)', moneda: 'BS' },
+  { id: 'USDT (Binance)', nombre: 'USDT (Binance)', moneda: 'USD' },
+  { id: 'Zinli', nombre: 'Zinli ($ USD)', moneda: 'USD' },
+  { id: 'PayPal', nombre: 'PayPal ($ USD)', moneda: 'USD' },
+  { id: 'Zelle', nombre: 'Zelle ($ USD)', moneda: 'USD' },
+]
+
+const AGENCIAS_ENVIO = [
+  { id: 'Retiro Personal', nombre: 'Retiro Personal / Entrega Local', requiereDatos: false },
+  { id: 'MRW', nombre: 'Envío Nacional — MRW', requiereDatos: true },
+  { id: 'Zoom', nombre: 'Envío Nacional — ZOOM', requiereDatos: true },
+  { id: 'Tealca', nombre: 'Envío Nacional — TEALCA', requiereDatos: true },
+]
+
 export default function Commerce({
   productos,
+  sales,
   tasaBCV,
   tasaParalelo,
-  refresh,
-  tab,
-  onNavigate: setTab,
-}: {
-  productos: Product[];
-  tasaBCV: number;
-  tasaParalelo: number;
-  refresh: () => Promise<void>;
-  tab: import("./AdminShell").Section;
-  onNavigate: (section: import("./AdminShell").Section) => void;
-}) {
-  const [role, setRole] = useState(""),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
-  const [cart, setCart] = useState<Item[]>([]),
-    [discount, setDiscount] = useState(0),
-    [customer, setCustomer] = useState({
-      nombre: "",
-      telefono: "",
-      cedula: "",
-      direccion: "",
-    });
-  const [sales, setSales] = useState<Sale[]>([]),
-    [expenses, setExpenses] = useState<Expense[]>([]),
-    [audit, setAudit] = useState<Audit[]>([]),
-    [profiles, setProfiles] = useState<Profile[]>([]);
-  const [expense, setExpense] = useState({
-    fecha: new Date().toLocaleDateString("en-CA"),
-    concepto: "",
-    categoria: "Envíos",
-    monto: "",
-  });
-  const [receipt, setReceipt] = useState<Sale | null>(null),
-    [returnSale, setReturnSale] = useState<Sale | null>(null),
-    [reason, setReason] = useState("");
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
-  const [seen, setSeen] = useState<string[]>([]);
-  const alerts = productos.filter(
-    (p) => p.stock <= p.stock_minimo && !seen.includes(`${p.id}:${p.stock}`),
-  );
-  let subtotal = 0,
-    total = 0,
-    invalid = "";
-  try {
-    subtotal = cart.reduce(
-      (sum, it) => sum + lineTotal(it.precio, it.cantidad, it.descuento),
-      0,
-    );
-    total = totalWithDiscount(subtotal, discount);
-  } catch (e) {
-    invalid = (e as Error).message;
+  onRefreshData,
+}: CommerceProps) {
+  // Carrito de facturación
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+
+  // Datos del Cliente y Envío
+  const [metodoEntrega, setMetodoEntrega] = useState<string>('Retiro Personal')
+  const [nombreCliente, setNombreCliente] = useState('')
+  const [cedulaCliente, setCedulaCliente] = useState('')
+  const [telefonoCliente, setTelefonoCliente] = useState('')
+  const [direccionEnvio, setDireccionEnvio] = useState('')
+
+  // Pagos mixtos desglosados
+  const [pagos, setPagos] = useState<PagoDesglosado[]>([])
+  const [metodoSeleccionado, setMetodoSeleccionado] = useState('Pago Móvil (Bs)')
+  const [montoPagoInput, setMontoPagoInput] = useState<string>('')
+  const [referenciaInput, setReferenciaInput] = useState<string>('')
+
+  // Estado de procesamiento
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+
+  // Agencia seleccionada actualmente
+  const agenciaActual = useMemo(() => {
+    return AGENCIAS_ENVIO.find(a => a.id === metodoEntrega) || AGENCIAS_ENVIO[0]
+  }, [metodoEntrega])
+
+  // Cálculo total del carrito en USD
+  const totalCarritoUSD = useMemo(() => {
+    return carrito.reduce((sum, item) => sum + item.precioAplicadoUSD * item.cantidad, 0)
+  }, [carrito])
+
+  // Total pagado acumulado en USD
+  const totalPagadoUSD = useMemo(() => {
+    return pagos.reduce((sum, p) => sum + p.montoUSD, 0)
+  }, [pagos])
+
+  // Saldo restante por cobrar en USD
+  const saldoRestanteUSD = useMemo(() => {
+    const diff = totalCarritoUSD - totalPagadoUSD
+    return diff > 0.001 ? diff : 0
+  }, [totalCarritoUSD, totalPagadoUSD])
+
+  // Equivalente total del pedido a Tasa BCV (para factura oficial)
+  const totalCarritoBsBCV = useMemo(() => {
+    return totalCarritoUSD * (tasaBCV || 1)
+  }, [totalCarritoUSD, tasaBCV])
+
+  // Agregar producto al carrito
+  const agregarAlCarrito = (prod: Producto) => {
+    if (prod.stock <= 0) return
+    setCarrito(prev => {
+      const existe = prev.find(i => i.producto.id === prod.id)
+      if (existe) {
+        if (existe.cantidad >= prod.stock) return prev
+        return prev.map(i =>
+          i.producto.id === prod.id ? { ...i, cantidad: i.cantidad + 1 } : i
+        )
+      }
+      return [...prev, { producto: prod, cantidad: 1, precioAplicadoUSD: prod.precio_venta }]
+    })
   }
-  async function load() {
-    const { data, error } = await supabase.rpc("app_role");
-    if (error) throw error;
-    setRole(data || "");
-    const fetchedSales = await allRows("pc_ventas", "*,pc_venta_items(*)");
-    setSales(fetchedSales as Sale[]);
-    if (data === "dueno") {
-      setExpenses((await allRows("pc_gastos")) as Expense[]);
-      const { data: logs, error: logError } = await supabase
-        .from("pc_auditoria")
-        .select("*")
-        .order("id", { ascending: false })
-        .limit(100);
-      if (logError) throw logError;
-      setAudit(logs || []);
-      const { data: people, error: profileError } = await supabase
-        .from("perfiles")
-        .select("*")
-        .order("nombre");
-      if (profileError) throw profileError;
-      setProfiles(people || []);
+
+  // Quitar del carrito
+  const quitarDelCarrito = (id: string) => {
+    setCarrito(prev => prev.filter(i => i.producto.id !== id))
+  }
+
+  // Cambiar cantidad
+  const cambiarCantidad = (id: string, delta: number) => {
+    setCarrito(prev =>
+      prev
+        .map(i => {
+          if (i.producto.id === id) {
+            const nuevaCant = i.cantidad + delta
+            if (nuevaCant <= 0) return null
+            if (nuevaCant > i.producto.stock) return i
+            return { ...i, cantidad: nuevaCant }
+          }
+          return i
+        })
+        .filter(Boolean) as ItemCarrito[]
+    )
+  }
+
+  // Añadir un pago a la lista mixta
+  const agregarPago = () => {
+    const val = parseFloat(montoPagoInput)
+    if (isNaN(val) || val <= 0) {
+      setErrorMsg('Ingresa un monto válido mayor a 0.')
+      return
     }
-  }
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setMessage("");
-    try {
-      await action();
-    } catch (e) {
-      setMessage((e as Error).message || "No se pudo completar la operación");
-    } finally {
-      setBusy(false);
+
+    const metodoObj = METODOS_PAGO.find(m => m.id === metodoSeleccionado)
+    const esMonedaBs = metodoObj?.moneda === 'BS'
+
+    let montoUSD = 0
+    let montoBs = 0
+
+    if (esMonedaBs) {
+      montoBs = val
+      // Conversión preserving margin: si se cobra en Bs, el valor en USD relativo al BCV
+      montoUSD = val / (tasaBCV || 1)
+    } else {
+      montoUSD = val
+      montoBs = val * (tasaBCV || 1)
     }
+
+    if (montoUSD > saldoRestanteUSD + 0.05) {
+      setErrorMsg(`El monto ingresado ($${montoUSD.toFixed(2)}) supera el saldo restante ($${saldoRestanteUSD.toFixed(2)}).`)
+      return
+    }
+
+    const nuevoPago: PagoDesglosado = {
+      id: Math.random().toString(36).substring(2, 9),
+      metodo: metodoSeleccionado,
+      montoUSD,
+      montoBs,
+      referencia: referenciaInput.trim() || undefined,
+    }
+
+    setPagos(prev => [...prev, nuevoPago])
+    setMontoPagoInput('')
+    setReferenciaInput('')
+    setErrorMsg('')
   }
-  useEffect(() => {
-    void run(load);
-  }, []);
-  useEffect(() => {
-    const channel = supabase
-      .channel("pc-stock")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "productos" },
-        () => {
-          void refresh();
-        },
+
+  // Eliminar un pago ingresado
+  const eliminarPago = (id: string) => {
+    setPagos(prev => prev.filter(p => p.id !== id))
+  }
+
+  // Validación previa antes de facturar
+  const esFormularioValido = useMemo(() => {
+    if (carrito.length === 0) return false
+    if (!nombreCliente.trim()) return false
+    if (saldoRestanteUSD > 0.01) return false
+    if (agenciaActual.requiereDatos) {
+      if (!cedulaCliente.trim() || !telefonoCliente.trim() || !direccionEnvio.trim()) {
+        return false
+      }
+    }
+    return true
+  }, [carrito, nombreCliente, saldoRestanteUSD, agenciaActual, cedulaCliente, telefonoCliente, direccionEnvio])
+
+  // Generador e Impresor de Factura / PDF de Cliente (Opción A)
+  const generarPDFCliente = (saleData: any) => {
+    const fecha = new Date().toLocaleDateString('es-VE', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
+    const itemsHTML = carrito
+      .map(
+        i => `
+        <tr style="border-bottom: 1px solid #2a2a3d;">
+          <td style="padding: 10px; font-weight: 500;">${i.producto.nombre} <br><span style="font-size:11px; color:#888;">SKU: ${i.producto.sku}</span></td>
+          <td style="padding: 10px; text-align: center;">${i.cantidad}</td>
+          <td style="padding: 10px; text-align: right;">$${i.precioAplicadoUSD.toFixed(2)}</td>
+          <td style="padding: 10px; text-align: right; font-weight: 600;">$${(i.precioAplicadoUSD * i.cantidad).toFixed(2)}</td>
+        </tr>
+      `
       )
-      .subscribe();
-    const timer = setInterval(() => {
-      void refresh();
-    }, 60000);
-    return () => {
-      void supabase.removeChannel(channel);
-      clearInterval(timer);
-    };
-  }, [refresh]);
+      .join('')
+
+    const pagosHTML = pagos
+      .map(
+        p => `
+        <div style="display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: #d1d5db;">
+          <span>• ${p.metodo} ${p.referencia ? `(Ref: ${p.referencia})` : ''}</span>
+          <span><strong>$${p.montoUSD.toFixed(2)} USD</strong> ${p.montoBs > 0 ? `(${p.montoBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs)` : ''}</span>
+        </div>
+      `
+      )
+      .join('')
+
+    const ventanaImp = window.open('', '_blank')
+    if (!ventanaImp) return
+
+    ventanaImp.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Comprobante de Compra — PURPLE CAT</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a12; color: #f3f4f6; padding: 40px; margin: 0; }
+          .ticket-card { max-width: 650px; margin: 0 auto; background: #161625; border: 1px solid #4c1d95; border-radius: 16px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          .header { text-align: center; border-bottom: 1px solid #374151; padding-bottom: 20px; margin-bottom: 24px; }
+          .title { font-size: 28px; font-weight: 800; letter-spacing: 2px; color: #c084fc; margin: 0; }
+          .sub { font-size: 12px; color: #9ca3af; margin-top: 4px; text-transform: uppercase; tracking: 1px; }
+          .info-grid { display: grid; grid-template-cols: 1dfr 1fr; gap: 16px; font-size: 13px; margin-bottom: 24px; background: #0d0d16; padding: 16px; border-radius: 10px; border: 1px solid #2e1065; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
+          th { text-align: left; padding: 10px; background: #2e1065; color: #e9d5ff; font-weight: 600; }
+          .totals { background: #0d0d16; padding: 20px; border-radius: 12px; border: 1px solid #374151; }
+          .footer { text-align: center; margin-top: 30px; font-size: 11px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="ticket-card">
+          <div class="header">
+            <h1 class="title">PURPLE CAT</h1>
+            <p class="sub">Moda Alternativa & Accesorios Góticos</p>
+            <p style="font-size: 12px; color: #9ca3af; margin-top: 8px;">Fecha: ${fecha} | Nota N°: #${saleData.id.slice(0, 8)}</p>
+          </div>
+
+          <div class="info-grid">
+            <div>
+              <strong style="color: #c084fc;">Cliente:</strong> ${nombreCliente}<br>
+              ${cedulaCliente ? `<strong style="color: #c084fc;">Cédula/RIF:</strong> ${cedulaCliente}<br>` : ''}
+              ${telefonoCliente ? `<strong style="color: #c084fc;">Teléfono:</strong> ${telefonoCliente}<br>` : ''}
+            </div>
+            <div>
+              <strong style="color: #c084fc;">Método de Entrega:</strong> ${agenciaActual.nombre}<br>
+              ${direccionEnvio ? `<strong style="color: #c084fc;">Dirección de Envío:</strong> ${direccionEnvio}` : ''}
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="text-align: center;">Cant.</th>
+                <th style="text-align: right;">Precio ($)</th>
+                <th style="text-align: right;">Subtotal ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHTML}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: #ffffff; border-bottom: 1px solid #374151; padding-bottom: 10px; margin-bottom: 12px;">
+              <span>TOTAL COMPRA:</span>
+              <span>$${totalCarritoUSD.toFixed(2)} USD</span>
+            </div>
+            
+            <div style="margin-top: 8px;">
+              <strong style="font-size: 12px; text-transform: uppercase; color: #a855f7; display: block; margin-bottom: 6px;">Desglose de Pagos Recibidos:</strong>
+              ${pagosHTML}
+            </div>
+
+            <div style="margin-top: 14px; pt: 10px; border-top: 1px stroke #374151; font-size: 12px; color: #9ca3af; display: flex; justify-content: space-between;">
+              <span>Monto de Referencia en Bolívares (Tasa BCV ${tasaBCV.toFixed(2)} Bs/$):</span>
+              <strong style="color: #e9d5ff;">${totalCarritoBsBCV.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs</strong>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>¡Gracias por tu compra en PURPLE CAT! 🖤</p>
+            <p>Instagram: @purplekat26 | Contacto: +58 412-9000623</p>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `)
+    ventanaImp.document.close()
+  }
+
+  // Procesar venta final y descontar inventario
+  const procesarVenta = async () => {
+    if (!esFormularioValido) return
+    setLoading(true)
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    try {
+      // 1. Crear registro de venta en Supabase
+      const { data: ventaCreada, error: errorVenta } = await supabase
+        .from('ventas')
+        .insert([
+          {
+            cliente_nombre: nombreCliente,
+            cliente_cedula: cedulaCliente || null,
+            cliente_telefono: telefonoCliente || null,
+            direccion_envio: direccionEnvio || null,
+            metodo_entrega: metodoEntrega,
+            total_usd: totalCarritoUSD,
+            total_bs_bcv: totalCarritoBsBCV,
+            tasa_bcv_momento: tasaBCV,
+            pagos_json: pagos,
+            items_json: carrito.map(i => ({
+              producto_id: i.producto.id,
+              nombre: i.producto.nombre,
+              sku: i.producto.sku,
+              cantidad: i.cantidad,
+              precio_usd: i.precioAplicadoUSD,
+            })),
+          },
+        ])
+        .select()
+        .single()
+
+      if (errorVenta) throw errorVenta
+
+      // 2. Descontar Stock de Productos en Supabase
+      for (const item of carrito) {
+        const nuevoStock = item.producto.stock - item.cantidad
+        await supabase
+          .from('productos')
+          .update({ stock: nuevoStock })
+          .eq('id', item.producto.id)
+      }
+
+      // 3. Generar Factura Impresa PDF para el cliente
+      generarPDFCliente(ventaCreada || { id: 'N/A' })
+
+      setSuccessMsg('¡Venta registrada y comprobante generado con éxito!')
+      
+      // Limpieza de campos
+      setCarrito([])
+      setPagos([])
+      setNombreCliente('')
+      setCedulaCliente('')
+      setTelefonoCliente('')
+      setDireccionEnvio('')
+      
+      onRefreshData()
+    } catch (err: any) {
+      console.error(err)
+      setErrorMsg(err.message || 'Ocurrió un error al procesar la venta.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Productos filtrados para añadir al carrito
+  const productosFiltrados = useMemo(() => {
+    return productos.filter(
+      p =>
+        p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [productos, searchTerm])
+
   return (
-    <section className="commerce-panel">
-      <div className="commerce-actions">
-        <button
-          disabled={busy}
-          className={button}
-          onClick={() =>
-            void run(async () => {
-              downloadCSV("inventario-purplecat", await allRows("productos"));
-            })
-          }
-        >
-          Exportar inventario CSV
-        </button>
-        <button
-          disabled={busy}
-          className={button}
-          onClick={() =>
-            void run(async () => {
-              await load();
-              await refresh();
-            })
-          }
-        >
-          Actualizar
-        </button>
+    <div className="space-y-8 font-sans text-zinc-100">
+      
+      {/* HEADER MÓDULO */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#161625] border border-purple-900/30 p-6 rounded-2xl shadow-xl">
+        <div>
+          <h2 className="text-2xl font-serif tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-zinc-100">
+            Facturación & Caja Chica
+          </h2>
+          <p className="text-xs text-zinc-400 mt-1">
+            Gestión de pedidos, entregas nacionales y cobros mixtos.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 bg-[#0a0a12] px-4 py-2 rounded-xl border border-purple-900/40 text-xs font-mono">
+          <span className="text-zinc-400">Tasa BCV Oficial:</span>
+          <span className="text-purple-300 font-bold">{tasaBCV.toFixed(2)} Bs/$</span>
+        </div>
       </div>
-      {message && (
-        <p role="status" className="p-3 border border-violet-400 mb-4">
-          {message}
-        </p>
+
+      {/* MENSAJES ESTADO */}
+      {errorMsg && (
+        <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-600/50 text-rose-200 text-sm">
+          ⚠️ {errorMsg}
+        </div>
       )}
-      {alerts.length > 0 && (
-        <aside className="border border-amber-700 p-3 mb-4" role="status">
-          <strong>Alertas de stock</strong>
-          <ul>
-            {alerts.map((p) => (
-              <li key={p.id}>
-                {p.nombre}:{" "}
-                {p.stock === 0 ? "Agotado" : `Stock bajo (${p.stock})`}{" "}
-                <button
-                  className="underline ml-3"
-                  onClick={() =>
-                    setSeen((prev) => [...prev, `${p.id}:${p.stock}`])
-                  }
-                >
-                  Marcar como vista
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
+      {successMsg && (
+        <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-600/50 text-emerald-200 text-sm">
+          ✅ {successMsg}
+        </div>
       )}
-      {tab === "Facturar" && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run(async () => {
-              const { data, error } = await supabase.rpc("pc_crear_venta", {
-                cliente: customer,
-                items: cart.map(({ producto_id, cantidad, descuento }) => ({
-                  producto_id,
-                  cantidad,
-                  descuento,
-                })),
-                descuento_factura: discount,
-                bcv: tasaBCV,
-                paralelo: tasaParalelo,
-                solicitud: requestId,
-              });
-              if (error) throw error;
-              setRequestId(crypto.randomUUID());
-              setCart([]);
-              setDiscount(0);
-              setCustomer({
-                nombre: "",
-                telefono: "",
-                cedula: "",
-                direccion: "",
-              });
-              setMessage(`Venta #${data} registrada`);
-              await refresh();
-              await load();
-              setTab("Ventas");
-            });
-          }}
-          className="grid gap-4"
-        >
-          <h2 className="text-xl">Nueva venta</h2>
-          <div className="grid md:grid-cols-4 gap-3">
-            {(["nombre", "telefono", "cedula", "direccion"] as const).map(
-              (key) => (
-                <label key={key}>
-                  {
-                    {
-                      nombre: "Nombre del cliente",
-                      telefono: "Teléfono",
-                      cedula: "Cédula / RIF",
-                      direccion: "Dirección",
-                    }[key]
-                  }
-                  <input
-                    className={field}
-                    required={key === "nombre"}
-                    maxLength={250}
-                    value={customer[key]}
-                    onChange={(e) =>
-                      setCustomer({ ...customer, [key]: e.target.value })
-                    }
-                  />
-                </label>
-              ),
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* COLUMNA IZQUIERDA: BUSCADOR DE PRODUCTOS (5 COLS) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="bg-[#161625] border border-purple-900/30 p-5 rounded-2xl shadow-xl space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-purple-300">
+               Catálogo de Inventario
+            </h3>
+
+            <input
+              type="text"
+              placeholder="Buscar producto por SKU o nombre..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+            />
+
+            <div className="max-h-[450px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {productosFiltrados.map(p => {
+                const enStock = p.stock > 0
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition ${
+                      enStock
+                        ? 'bg-[#0d0d16] border-purple-900/20 hover:border-purple-600/40 cursor-pointer'
+                        : 'bg-[#0a0a12]/50 border-zinc-800 opacity-50 cursor-not-allowed'
+                    }`}
+                    onClick={() => enStock && agregarAlCarrito(p)}
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-zinc-200">{p.nombre}</div>
+                      <div className="text-xs text-zinc-500 font-mono">#{p.sku} · Stock: {p.stock}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-purple-300">${p.precio_venta.toFixed(2)}</div>
+                      <button
+                        disabled={!enStock}
+                        className="text-[11px] font-semibold text-purple-400 hover:text-purple-200 mt-0.5"
+                      >
+                        {enStock ? '+ Añadir' : 'Agotado'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* COLUMNA DERECHA: FACTURACIÓN Y PAGO (7 COLS) */}
+        <div className="lg:col-span-7 space-y-6">
+          
+          {/* TABLA DEL CARRITO */}
+          <div className="bg-[#161625] border border-purple-900/30 p-5 rounded-2xl shadow-xl space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-purple-300 flex justify-between items-center">
+              <span>🛒 Resumen de Orden</span>
+              <span className="text-xs font-mono text-zinc-400">{carrito.length} ítems</span>
+            </h3>
+
+            {carrito.length === 0 ? (
+              <div className="text-center py-10 text-zinc-500 text-sm border border-dashed border-purple-900/30 rounded-xl">
+                El carrito de facturación está vacío. Haz clic en los productos para agregarlos.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {carrito.map(item => (
+                  <div
+                    key={item.producto.id}
+                    className="flex items-center justify-between p-3 bg-[#0a0a12] border border-purple-900/30 rounded-xl text-sm"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-zinc-200">{item.producto.nombre}</div>
+                      <div className="text-xs text-purple-400">${item.precioAplicadoUSD.toFixed(2)} USD c/u</div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => cambiarCantidad(item.producto.id, -1)}
+                        className="w-7 h-7 rounded-lg bg-purple-950 border border-purple-800 text-purple-200 font-bold hover:bg-purple-900"
+                      >
+                        -
+                      </button>
+                      <span className="w-6 text-center font-mono font-bold text-zinc-100">{item.cantidad}</span>
+                      <button
+                        onClick={() => cambiarCantidad(item.producto.id, 1)}
+                        className="w-7 h-7 rounded-lg bg-purple-950 border border-purple-800 text-purple-200 font-bold hover:bg-purple-900"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <div className="w-24 text-right font-bold text-zinc-100">
+                      ${(item.precioAplicadoUSD * item.cantidad).toFixed(2)}
+                    </div>
+
+                    <button
+                      onClick={() => quitarDelCarrito(item.producto.id)}
+                      className="ml-3 text-xs text-rose-400 hover:text-rose-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <div className="pt-3 border-t border-purple-900/30 flex justify-between items-center font-serif text-lg font-bold text-purple-200">
+                  <span>TOTAL GENERAL:</span>
+                  <span>${totalCarritoUSD.toFixed(2)} USD</span>
+                </div>
+              </div>
             )}
           </div>
-          <label>
-            Agregar producto
-            <select
-              className={field}
-              value=""
-              onChange={(e) => {
-                const p = productos.find(
-                  (p) => p.id === Number(e.target.value),
-                );
-                if (p)
-                  setCart([
-                    ...cart,
-                    {
-                      producto_id: p.id,
-                      nombre: p.nombre,
-                      precio: Number(p.precio_venta),
-                      cantidad: 1,
-                      descuento: 0,
-                    },
-                  ]);
-              }}
-            >
-              <option value="">Seleccionar…</option>
-              {productos
-                .filter(
-                  (p) =>
-                    p.stock > 0 && !cart.some((it) => it.producto_id === p.id),
-                )
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} · ${money(p.precio_venta)} · {p.stock}{" "}
-                    disponibles
-                  </option>
-                ))}
-            </select>
-          </label>
-          {cart.map((it, index) => (
-            <div
-              key={it.producto_id}
-              className="grid md:grid-cols-5 gap-3 border-b border-violet-900 pb-3"
-            >
-              <span>
-                {it.nombre}
-                <br />${money(it.precio)} c/u
-              </span>
-              <label>
-                Cantidad
-                <input
-                  className={field}
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                  max={productos.find((p) => p.id === it.producto_id)?.stock}
-                  value={it.cantidad}
-                  onChange={(e) =>
-                    setCart(
-                      cart.map((v, i) =>
-                        i === index
-                          ? { ...v, cantidad: Number(e.target.value) }
-                          : v,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                Descuento de línea ($)
-                <input
-                  className={field}
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  max={it.precio * it.cantidad}
-                  value={it.descuento}
-                  onChange={(e) =>
-                    setCart(
-                      cart.map((v, i) =>
-                        i === index
-                          ? { ...v, descuento: Number(e.target.value) }
-                          : v,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <span>${money(it.precio * it.cantidad - it.descuento)}</span>
-              <button
-                type="button"
-                className={button}
-                onClick={() => setCart(cart.filter((_, i) => i !== index))}
-              >
-                Quitar
-              </button>
-            </div>
-          ))}
-          <label>
-            Descuento adicional de factura ($)
-            <input
-              className={field}
-              required
-              type="number"
-              min="0"
-              step="0.01"
-              max={subtotal}
-              value={discount}
-              onChange={(e) => setDiscount(Number(e.target.value))}
-            />
-          </label>
-          <p>
-            Subtotal: ${money(subtotal)} · Total:{" "}
-            <strong>${money(total)}</strong> · Bs {money(total * tasaParalelo)}{" "}
-            (paralelo {tasaParalelo}; BCV {tasaBCV})
-          </p>
-          {invalid && <p role="alert">{invalid}</p>}
-          <button
-            className={button}
-            disabled={busy || !cart.length || Boolean(invalid) || !role}
-          >
-            {busy ? "Procesando…" : "Registrar venta"}
-          </button>
-        </form>
-      )}
-      {tab === "Ventas" && (
-        <div className="grid gap-3">
-          <h2 className="text-xl">Ventas</h2>
-          <p>
-            Ventas vigentes: $
-            {money(
-              sales
-                .filter((s) => s.estado === "completa")
-                .reduce((sum, s) => sum + Number(s.total), 0),
-            )}{" "}
-            · Devueltas: {sales.filter((s) => s.estado === "devuelta").length}
-          </p>
-          <button
-            className={button}
-            onClick={() =>
-              void run(async () => {
-                downloadCSV(
-                  "ventas-purplecat",
-                  sales.map((sale) => ({
-                    id: sale.id,
-                    fecha: sale.created_at,
-                    cliente: sale.cliente_nombre,
-                    telefono: sale.cliente_telefono,
-                    cedula: sale.cliente_cedula,
-                    direccion: sale.cliente_direccion,
-                    estado: sale.estado,
-                    subtotal: sale.pc_venta_items.reduce(
-                      (sum, it) => sum + Number(it.precio) * it.cantidad,
-                      0,
-                    ),
-                    descuento_lineas: sale.pc_venta_items.reduce(
-                      (sum, it) => sum + Number(it.descuento),
-                      0,
-                    ),
-                    descuento_factura: sale.descuento,
-                    total_usd: sale.total,
-                    tasa_bcv: sale.tasa_bcv,
-                    tasa_paralelo: sale.tasa_paralelo,
-                    total_bs: Number(sale.total) * Number(sale.tasa_paralelo),
-                    motivo_devolucion: sale.motivo_devolucion,
-                  })),
-                );
-              })
-            }
-          >
-            Exportar ventas CSV
-          </button>
-          {sales.length === 0 && <p>No hay ventas registradas.</p>}
-          {sales.map((s) => (
-            <article
-              key={s.id}
-              className="flex flex-wrap justify-between gap-3 border-b border-violet-900 p-3"
-            >
+
+          {/* DATOS DE ENVÍO / ENTREGA */}
+          <div className="bg-[#161625] border border-purple-900/30 p-5 rounded-2xl shadow-xl space-y-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-purple-300">
+              🚚 Método de Entrega & Cliente
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                #{s.id} · {s.cliente_nombre} · ${money(s.total)} · {s.estado}
-                <br />
-                <small>
-                  {new Date(s.created_at).toLocaleString("es-VE")}
-                  {s.motivo_devolucion && ` · ${s.motivo_devolucion}`}
-                </small>
-              </div>
-              <div className="flex gap-2">
-                <button className={button} onClick={() => setReceipt(s)}>
-                  Factura / PDF
-                </button>
-                {role === "dueno" && s.estado === "completa" && (
-                  <button
-                    className={button}
-                    onClick={() => {
-                      setReturnSale(s);
-                      setReason("");
-                    }}
-                  >
-                    Devolver / anular
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-      {tab === "Gastos" && role === "dueno" && (
-        <div className="grid gap-4">
-          <h2 className="text-xl">Gastos operativos</h2>
-          <form
-            className="grid md:grid-cols-5 gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(async () => {
-                const { error } = await supabase
-                  .from("pc_gastos")
-                  .insert({ ...expense, monto: Number(expense.monto) });
-                if (error) throw error;
-                setExpense({ ...expense, concepto: "", monto: "" });
-                await load();
-                setMessage("Gasto registrado");
-              });
-            }}
-          >
-            <label>
-              Fecha
-              <input
-                className={field}
-                type="date"
-                required
-                value={expense.fecha}
-                onChange={(e) =>
-                  setExpense({ ...expense, fecha: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              Concepto
-              <input
-                className={field}
-                required
-                maxLength={250}
-                value={expense.concepto}
-                onChange={(e) =>
-                  setExpense({ ...expense, concepto: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              Categoría
-              <select
-                className={field}
-                value={expense.categoria}
-                onChange={(e) =>
-                  setExpense({ ...expense, categoria: e.target.value })
-                }
-              >
-                {["Envíos", "Empaque", "Comisiones", "Otros"].map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Monto ($)
-              <input
-                className={field}
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                value={expense.monto}
-                onChange={(e) =>
-                  setExpense({ ...expense, monto: e.target.value })
-                }
-              />
-            </label>
-            <button disabled={busy} className={button}>
-              Registrar gasto
-            </button>
-          </form>
-          <p>
-            Total gastos: $
-            {money(expenses.reduce((sum, e) => sum + Number(e.monto), 0))}
-          </p>
-          <button
-            className={button}
-            onClick={() =>
-              void run(async () => downloadCSV("gastos-purplecat", expenses))
-            }
-          >
-            Exportar gastos CSV
-          </button>
-          {expenses.map((e) => (
-            <p key={e.id}>
-              {e.fecha} · {e.categoria} · {e.concepto} · ${money(e.monto)}
-            </p>
-          ))}
-        </div>
-      )}
-      {tab === "Historial" && role === "dueno" && (
-        <div>
-          <h2 className="text-xl mb-3">Últimos 100 cambios</h2>
-          {audit.map((a) => (
-            <details key={a.id} className="border-b border-violet-900 py-2">
-              <summary>
-                {new Date(a.created_at).toLocaleString("es-VE")} · {a.tabla} #
-                {a.registro_id} · {a.accion} ·{" "}
-                {profiles.find((p) => p.id === a.usuario)?.nombre ||
-                  a.usuario ||
-                  "SQL / sistema"}
-              </summary>
-              <pre className="overflow-auto text-xs">
-                {JSON.stringify(
-                  { antes: a.antes, despues: a.despues },
-                  null,
-                  2,
-                )}
-              </pre>
-            </details>
-          ))}
-        </div>
-      )}
-      {tab === "Usuarios" && role === "dueno" && (
-        <div className="grid gap-3">
-          <h2 className="text-xl">Roles de acceso</h2>
-          <p>
-            El dueño administra inventario, gastos, devoluciones y roles. El
-            empleado consulta inventario y registra ventas. Las cuentas nuevas
-            se crean desde Supabase Authentication y se agregan a perfiles.
-          </p>
-          {profiles.map((p) => (
-            <label key={p.id} className="flex flex-wrap gap-3">
-              {p.nombre}
-              <select
-                className={field + " max-w-xs"}
-                value={p.rol}
-                disabled={busy}
-                onChange={(e) => {
-                  const rol = e.target.value;
-                  void run(async () => {
-                    const { data, error } = await supabase
-                      .from("perfiles")
-                      .update({ rol })
-                      .eq("id", p.id)
-                      .select("id");
-                    if (error) throw error;
-                    if (!data?.length)
-                      throw new Error("No podés cambiar tu propio rol");
-                    await load();
-                  });
-                }}
-              >
-                <option value="dueno">Dueño</option>
-                <option value="empleado">Empleado</option>
-              </select>
-            </label>
-          ))}
-        </div>
-      )}
-      {returnSale && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Devolver venta"
-          className="fixed inset-0 z-50 bg-black/90 p-6 overflow-auto"
-        >
-          <form
-            className="max-w-lg mx-auto grid gap-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(async () => {
-                const { error } = await supabase.rpc("pc_devolver_venta", {
-                  venta: returnSale.id,
-                  motivo: reason,
-                });
-                if (error) throw error;
-                setReturnSale(null);
-                await refresh();
-                await load();
-                setMessage("Venta devuelta; stock restaurado");
-              });
-            }}
-          >
-            <h2 className="text-xl">Devolver venta #{returnSale.id}</h2>
-            <p>
-              Se devolverá la venta completa por ${money(returnSale.total)} y se
-              restaurarán todas sus unidades. Registrá el reembolso al cliente
-              fuera de la aplicación.
-            </p>
-            <label>
-              Motivo
-              <textarea
-                className={field}
-                required
-                maxLength={500}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </label>
-            <button className={button} disabled={busy}>
-              Confirmar devolución completa
-            </button>
-            <button
-              type="button"
-              className={button}
-              onClick={() => setReturnSale(null)}
-            >
-              Cancelar
-            </button>
-            <p role="alert">{message}</p>
-          </form>
-        </div>
-      )}
-      {receipt &&
-        createPortal(
-          <div
-            className="pc-receipt-overlay fixed inset-0 z-50 bg-black/90 overflow-auto p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Factura"
-          >
-            <article className="pc-receipt max-w-3xl mx-auto bg-white text-black p-8">
-              <h1 className="text-2xl">
-                Purple Cat · Comprobante #{receipt.id}
-              </h1>
-              <p>
-                {new Date(receipt.created_at).toLocaleString("es-VE")} ·{" "}
-                {receipt.estado}
-              </p>
-              <p>
-                {receipt.cliente_nombre} · {receipt.cliente_cedula}
-                <br />
-                {receipt.cliente_telefono}
-                <br />
-                {receipt.cliente_direccion}
-              </p>
-              <table className="w-full my-6">
-                <thead>
-                  <tr>
-                    {[
-                      "Producto",
-                      "Cant.",
-                      "Precio $",
-                      "Desc. $",
-                      "Total $",
-                    ].map((h) => (
-                      <th key={h} className="text-left">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {receipt.pc_venta_items.map((it, i) => (
-                    <tr key={i}>
-                      <td>{it.nombre}</td>
-                      <td>{it.cantidad}</td>
-                      <td>{money(it.precio)}</td>
-                      <td>{money(it.descuento)}</td>
-                      <td>
-                        {money(
-                          Number(it.precio) * it.cantidad -
-                            Number(it.descuento),
-                        )}
-                      </td>
-                    </tr>
+                <label className="block text-xs text-zinc-400 mb-1">Agencia / Modalidad *</label>
+                <select
+                  value={metodoEntrega}
+                  onChange={e => setMetodoEntrega(e.target.value)}
+                  className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500"
+                >
+                  {AGENCIAS_ENVIO.map(a => (
+                    <option key={a.id} value={a.id}>{a.nombre}</option>
                   ))}
-                </tbody>
-              </table>
-              <p>Descuento adicional: ${money(receipt.descuento)}</p>
-              <p className="text-xl">
-                Total: ${money(receipt.total)} · Bs{" "}
-                {money(Number(receipt.total) * Number(receipt.tasa_paralelo))}
-              </p>
-              <p>
-                Tasas registradas: BCV {receipt.tasa_bcv} · Paralelo{" "}
-                {receipt.tasa_paralelo}
-              </p>
-              {receipt.motivo_devolucion && (
-                <p>Devolución: {receipt.motivo_devolucion}</p>
-              )}
-              <div className="pc-no-print flex gap-3 mt-6">
-                <button
-                  className={button + " text-white"}
-                  onClick={() => window.print()}
-                >
-                  Imprimir / Guardar como PDF
-                </button>
-                <button
-                  className={button + " text-white"}
-                  onClick={() => setReceipt(null)}
-                >
-                  Cerrar
-                </button>
+                </select>
               </div>
-            </article>
-          </div>,
-          document.body,
-        )}
-      <style>{`@media print { body > *:not(.pc-receipt-overlay) { display: none!important; } body { background: white!important; } .pc-receipt-overlay { position: absolute!important; inset: 0!important; padding: 0!important; background: white!important; overflow: visible!important; } .pc-receipt { max-width: none!important; color: black!important; } .pc-no-print, .pc-no-print * { display: none!important; } @page { margin: 15mm; } }`}</style>
-    </section>
-  );
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Nombre Completo Cliente *</label>
+                <input
+                  type="text"
+                  placeholder="Ej: María Pérez"
+                  value={nombreCliente}
+                  onChange={e => setNombreCliente(e.target.value)}
+                  className="w-full bg-[#0a0a12] border border-purple-900/40 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+
+            {agenciaActual.requiereDatos && (
+              <div className="pt-2 border-t border-purple-900/20 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-rose-300 mb-1">Cédula / RIF (Obligatorio Envío) *</label>
+                  <input
+                    type="text"
+                    placeholder="V-12345678"
+                    value={cedulaCliente}
+                    onChange={e => setCedulaCliente(e.target.value)}
+                    className="w-full bg-[#0a0a12] border border-rose-900/40 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-rose-300 mb-1">Teléfono Contacto *</label>
+                  <input
+                    type="text"
+                    placeholder="0412-1234567"
+                    value={telefonoCliente}
+                    onChange={e => setTelefonoCliente(e.target.value)}
+                    className="w-full bg-[#0a0a12] border border-rose-900/40 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-rose-300 mb-1">Dirección Exacta de Agencia / Destino *</label>
+                  <input
+                    type="text"
+                    placeholder="Agencia MRW Altamira, Caracas / Estado..."
+                    value={direccionEnvio}
+                    onChange={e => setDireccionEnvio(e.target.value)}
+                    className="w-full bg-[#0a0a12] border border-rose-900/40 rounded-xl px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* COBRO DE PAGOS MIXTOS */}
+          <div className="bg-[#161625] border border-purple-900/30 p-5 rounded-2xl shadow-xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-purple-300">
+                💳 Pasarela de Pagos Mixtos
+              </h3>
+              <div className="text-xs font-mono">
+                <span className="text-zinc-400">Restante: </span>
+                <span className={saldoRestanteUSD > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                  ${saldoRestanteUSD.toFixed(2)} USD
+                </span>
+              </div>
+            </div>
+
+            {/* FORMULARIO PARA AÑADIR PAGO */}
+            {saldoRestanteUSD > 0.001 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-[#0a0a12] border border-purple-900/30 rounded-xl">
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Método</label>
+                  <select
+                    value={metodoSeleccionado}
+                    onChange={e => setMetodoSeleccionado(e.target.value)}
+                    className="w-full bg-[#161625] border border-purple-900/40 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none"
+                  >
+                    {METODOS_PAGO.map(m => (
+                      <option key={m.id} value={m.id}>{m.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-zinc-400 mb-1">Monto Pagado</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder={METODOS_PAGO.find(m => m.id === metodoSeleccionado)?.moneda === 'BS' ? 'Monto en Bs' : 'Monto en USD'}
+                    value={montoPagoInput}
+                    onChange={e => setMontoPagoInput(e.target.value)}
+                    className="w-full bg-[#161625] border border-purple-900/40 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[11px] text-zinc-400 mb-1">Referencia (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="#Ref"
+                      value={referenciaInput}
+                      onChange={e => setReferenciaInput(e.target.value)}
+                      className="w-full bg-[#161625] border border-purple-900/40 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={agregarPago}
+                    className="py-1.5 px-3 rounded-lg bg-purple-900 hover:bg-purple-700 border border-purple-500/50 text-purple-100 text-xs font-semibold transition"
+                  >
+                    + Añadir
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* LISTA DE PAGOS AGREGADOS */}
+            {pagos.length > 0 && (
+              <div className="space-y-2 pt-2">
+                {pagos.map(p => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between p-2.5 bg-[#0a0a12] border border-purple-900/20 rounded-lg text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-purple-300">• {p.metodo}</span>
+                      {p.referencia && <span className="text-zinc-500 ml-2">(Ref: {p.referencia})</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-zinc-200">
+                        ${p.montoUSD.toFixed(2)} USD
+                        {p.montoBs > 0 && <span className="text-zinc-500 text-[11px]"> ({p.montoBs.toFixed(2)} Bs)</span>}
+                      </span>
+                      <button
+                        onClick={() => eliminarPago(p.id)}
+                        className="text-rose-400 hover:text-rose-200 font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* BOTÓN FINAL DE PROCESAR Y GENERAR FACTURA */}
+          <button
+            disabled={!esFormularioValido || loading}
+            onClick={procesarVenta}
+            className={`w-full py-4 px-6 rounded-2xl font-serif text-base tracking-wider transition-all duration-300 shadow-xl ${
+              esFormularioValido && !loading
+                ? 'bg-gradient-to-r from-purple-900 via-purple-800 to-purple-950 border border-purple-500 text-white hover:brightness-115 cursor-pointer'
+                : 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed'
+            }`}
+          >
+            {loading ? 'Procesando Venta...' : '📄 PROCESAR VENTA Y IMPRIMIR FACTURA'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
