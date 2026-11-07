@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { configured, supabase } from "../lib/supabase";
 import Brand from "./Brand";
 import Icon from "./Icon";
+// Alias público → correo real de la cuenta. NO es un secreto: la clave sigue
+// viviendo en Supabase Auth (encriptada, con límite de intentos).
+const ALIAS = (process.env.NEXT_PUBLIC_ADMIN_ALIAS || "oritoro")
+  .trim()
+  .toLowerCase();
+const ALIAS_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "oritoro@purplecat.app")
+  .trim()
+  .toLowerCase();
 export default function Login() {
   const router = useRouter();
   const [user, setUser] = useState(""),
@@ -83,14 +91,10 @@ export default function Login() {
                 );
                 return;
               }
-              const email =
-                user.trim().toLowerCase() === "admin"
-                  ? "admin@purplecat.test"
-                  : user.trim();
-              if (!email.includes("@")) {
-                setError(
-                  "Ingresá tu correo completo o el usuario admin de la cuenta de prueba.",
-                );
+              const entered = user.trim().toLowerCase();
+              const email = entered === ALIAS ? ALIAS_EMAIL : "";
+              if (!email) {
+                setError("Solo podés entrar con tu usuario y contraseña.");
                 return;
               }
               setBusy(true);
@@ -103,7 +107,7 @@ export default function Login() {
                   setError(
                     error.code === "invalid_credentials" ||
                       /invalid login/i.test(error.message)
-                      ? "El correo o la contraseña no coinciden. Revisalos e intentá de nuevo."
+                      ? "El usuario o la contraseña no coinciden. Revisalos e intentá de nuevo."
                       : /email.*confirm/i.test(error.message)
                         ? "Tu correo todavía no está confirmado. Contactá al dueño para activar tu cuenta."
                         : /rate|too many/i.test(error.message)
@@ -123,12 +127,12 @@ export default function Login() {
               }
             }}
           >
-            <label htmlFor="login-user">Correo o usuario</label>
+            <label htmlFor="login-user">Usuario</label>
             <input
               id="login-user"
               name="username"
               autoComplete="username"
-              placeholder="tu@correo.com"
+              placeholder="Tu usuario"
               value={user}
               onChange={(e) => setUser(e.target.value)}
               required

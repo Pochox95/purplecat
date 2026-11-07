@@ -5,7 +5,7 @@ Inventario y gestión de ventas en Next.js y Supabase.
 ## Catálogo público y panel privado
 
 - `/`: catálogo público de solo lectura, búsqueda, categorías, tallas, disponibilidad y galería. Usa las fotos existentes de `image_url` / `imagenes`; si la principal falla intenta la siguiente foto. No hay productos ni ilustraciones de prueba cargados por la aplicación.
-- `/login`: acceso del equipo con correo y contraseña; `admin` funciona como alias de `admin@purplecat.test` si creaste esa cuenta de prueba. La contraseña nunca está incluida ni precargada en el código.
+- `/login`: acceso del equipo con **usuario y contraseña** (sin correo). El alias definido en `NEXT_PUBLIC_ADMIN_ALIAS` se traduce internamente al correo real `NEXT_PUBLIC_ADMIN_EMAIL` (por defecto, `admin` → `admin@purplecat.test`). El alias es público por diseño — la seguridad la impone la contraseña en Supabase Auth, nunca el alias. La contraseña nunca está incluida ni precargada en el código.
 - `/admin`: panel con barra lateral, inventario, nueva venta, historial de ventas y las secciones exclusivas del dueño. Al salir vuelve al catálogo. La entrada sin sesión lleva al login.
 
 **Para habilitar el catálogo con datos reales, ejecutá `supabase/migrations/202610210002_public_catalog.sql` en SQL Editor después de la migración de comercio.** Si la primera migración ya está aplicada, ejecutá únicamente la nueva. La vista `catalogo_productos` expone campos comerciales y disponibilidad, pero omite costos y stock exacto. Una política restrictiva bloquea el acceso anónimo a la tabla original incluso si quedó una política pública antigua. No modifica ni copia las fotos: conserva las URLs existentes.
