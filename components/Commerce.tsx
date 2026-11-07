@@ -64,6 +64,7 @@ type PagoMixto = {
   referencia: string | null;
 };
 const METODOS_PAGO: { id: string; moneda: "USD" | "BS" }[] = [
+  { id: "USD Efectivo", moneda: "USD" },
   { id: "Binance USDT", moneda: "USD" },
   { id: "Pago Móvil", moneda: "BS" },
   { id: "Zelle", moneda: "USD" },
@@ -138,7 +139,7 @@ export default function Commerce({
   const [metodoEntrega, setMetodoEntrega] = useState(ENTREGA_RETIRO),
     [pagos, setPagos] = useState<PagoMixto[]>([]),
     [metodoSeleccionado, setMetodoSeleccionado] =
-      useState<string>("Binance USDT"),
+      useState<string>("USD Efectivo"),
     [montoPagoInput, setMontoPagoInput] = useState(""),
     [referenciaInput, setReferenciaInput] = useState("");
   const envioNacional = metodoEntrega === ENTREGA_NACIONAL;
