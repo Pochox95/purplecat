@@ -74,13 +74,55 @@ export default function Inventory() {
   }>(null);
 
   const [mensajeCopiado, setMensajeCopiado] = useState<string | null>(null);
+  const [tasaAviso, setTasaAviso] = useState<string | null>(null);
+
+  const aplicarTasas = useCallback((bcv: number, paralelo: number) => {
+    if (
+      Number.isFinite(bcv) && bcv > 0 &&
+      Number.isFinite(paralelo) && paralelo > 0
+    ) {
+      setTasaBCV(bcv);
+      setTasaParalelo(paralelo);
+      localStorage.setItem("purplecat_bcv", String(bcv));
+      localStorage.setItem("purplecat_paralelo", String(paralelo));
+    }
+  }, []);
 
   useEffect(() => {
     fetchProductos();
+    // Respaldo local inmediato mientras llegan las tasas compartidas
     const bcvGuardada = localStorage.getItem("purplecat_bcv");
     const paraleloGuardada = localStorage.getItem("purplecat_paralelo");
     if (bcvGuardada) setTasaBCV(parseFloat(bcvGuardada));
     if (paraleloGuardada) setTasaParalelo(parseFloat(paraleloGuardada));
+    // Tasas compartidas desde Supabase (todo el equipo ve lo mismo)
+    void (async () => {
+      const { data, error } = await supabase
+        .from("pc_tasas")
+        .select("bcv, paralelo")
+        .eq("id", 1)
+        .maybeSingle();
+      if (!error && data) aplicarTasas(Number(data.bcv), Number(data.paralelo));
+    })();
+    // Sincronización en vivo entre dispositivos (si la tabla está en Realtime)
+    const channel = supabase
+      .channel("pc-tasas")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pc_tasas" },
+        (payload) => {
+          const row = payload.new as { bcv?: number; paralelo?: number } | null;
+          const activo = document.activeElement?.id;
+          if (activo === "rate-bcv" || activo === "rate-parallel") return;
+          if (row?.bcv && row?.paralelo)
+            aplicarTasas(Number(row.bcv), Number(row.paralelo));
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const actualizarTasaBCV = (val: number) => {
@@ -92,6 +134,30 @@ export default function Inventory() {
     setTasaParalelo(val);
     localStorage.setItem("purplecat_paralelo", val.toString());
   };
+
+  async function guardarTasas() {
+    if (!owner) return;
+    const bcv = Number(tasaBCV);
+    const paralelo = Number(tasaParalelo);
+    if (
+      !Number.isFinite(bcv) || bcv <= 0 ||
+      !Number.isFinite(paralelo) || paralelo <= 0
+    ) {
+      setTasaAviso("Las tasas deben ser mayores a cero.");
+      setTimeout(() => setTasaAviso(null), 3000);
+      return;
+    }
+    const { error } = await supabase
+      .from("pc_tasas")
+      .update({ bcv, paralelo })
+      .eq("id", 1);
+    setTasaAviso(
+      error
+        ? "No se pudieron guardar las tasas compartidas."
+        : "Tasas guardadas para todo el equipo ✓",
+    );
+    setTimeout(() => setTasaAviso(null), 3000);
+  }
 
   const fetchProductos = useCallback(async () => {
     try {
@@ -534,7 +600,10 @@ export default function Inventory() {
                 min="0.01"
                 step="0.01"
                 value={tasaBCV}
+                disabled={!owner}
+                title={owner ? "Se guarda para todo el equipo al salir del campo" : "Solo el dueño puede editar las tasas"}
                 onChange={(e) => actualizarTasaBCV(Number(e.target.value))}
+                onBlur={() => void guardarTasas()}
               />
               <span>Bs</span>
             </label>
@@ -547,7 +616,10 @@ export default function Inventory() {
                 min="0.01"
                 step="0.01"
                 value={tasaParalelo}
+                disabled={!owner}
+                title={owner ? "Se guarda para todo el equipo al salir del campo" : "Solo el dueño puede editar las tasas"}
                 onChange={(e) => actualizarTasaParalelo(Number(e.target.value))}
+                onBlur={() => void guardarTasas()}
               />
               <span>Bs</span>
             </label>
@@ -558,6 +630,11 @@ export default function Inventory() {
               <Icon name="grid" size={17} />
               Calculadora
             </button>
+            {tasaAviso && (
+              <span role="status" className="rates-aviso">
+                {tasaAviso}
+              </span>
+            )}
           </div>
         </div>
 

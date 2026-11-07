@@ -2562,3 +2562,12 @@ input[type="checkbox"] {
     grid-template-columns: 160px minmax(0, 1fr);
   }
 }
+
+/* Aviso de guardado de tasas compartidas (202611060002) */
+.rates-aviso {
+  font-size: 0.75rem;
+  color: #c4b5fd;
+  max-width: 230px;
+  align-self: center;
+  line-height: 1.35;
+}

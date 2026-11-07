@@ -38,8 +38,9 @@ insert into public.perfiles(id,nombre,rol) values
 ```
 
 5. Si usás pagos mixtos y envío nacional, ejecutá **una vez** `supabase/migrations/202611060001_entrega_pagos.sql` desde SQL Editor. Agrega a `pc_ventas` las columnas `metodo_entrega` y `metodos_pago` (jsonb) y reemplaza `pc_crear_venta`: exige que la suma de los pagos en USD cuadre con el total de la factura (tolerancia 1 centavo) y que una venta con entrega "Envío nacional" tenga nombre, cédula/RIF, teléfono y dirección. Las ventas anteriores conservan el valor por defecto (`Retiro en tienda`, `[]` pagos).
-6. Configurá las mismas variables de `.env.example` en Vercel y reconstruí el despliegue. El login queda bloqueado hasta tener un perfil válido. El dueño puede cambiar roles de otras cuentas desde Usuarios; no puede quitarse su propio rol.
-7. Opcionalmente habilitá `productos` en la publicación `supabase_realtime`. Las alertas en la aplicación usan Realtime y, como respaldo, consultan cada minuto. No son notificaciones push ni funcionan con la aplicación cerrada.
+6. Si querés que las tasas BCV/paralelo sean las mismas en PC y teléfono, ejecutá **una vez** `supabase/migrations/202611060002_tasas.sql` desde SQL Editor. Crea `pc_tasas` (una fila compartida): el dueño la edita y el equipo la lee (y se sincroniza en vivo si la tabla está en Realtime). Sin esta migración el panel sigue funcionando con la copia local del navegador (localStorage), como antes.
+7. Configurá las mismas variables de `.env.example` en Vercel y reconstruí el despliegue. El login queda bloqueado hasta tener un perfil válido. El dueño puede cambiar roles de otras cuentas desde Usuarios; no puede quitarse su propio rol.
+8. Opcionalmente habilitá `pc_tasas` y `productos` en la publicación `supabase_realtime`. Las alertas en la aplicación usan Realtime y, como respaldo, consultan cada minuto. No son notificaciones push ni funcionan con la aplicación cerrada.
 
 **Las migraciones se entregan en GitHub. Su aplicación al Supabase real y el estado del despliegue en Vercel deben verificarse por separado.**
 

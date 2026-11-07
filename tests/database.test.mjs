@@ -364,3 +364,86 @@ test("mixed payments and national delivery are validated and persisted", async (
     await db.close();
   }
 });
+
+test("shared exchange rates: team reads, owner writes, empleados cannot", async () => {
+  const db = new PGlite();
+  const owner = "00000000-0000-4000-8000-000000000021",
+    employee = "00000000-0000-4000-8000-000000000022";
+  try {
+    await db.exec(`create role anon; create role authenticated; create schema auth; create schema storage;
+ create table auth.users(id uuid primary key);
+ create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+ grant usage on schema public,auth,storage to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+ create table public.productos(id bigint primary key, nombre text not null, precio_venta numeric(14,2) not null, stock integer not null, stock_minimo integer default 3);
+ create table storage.objects(id bigint primary key,bucket_id text);
+ insert into auth.users values('${owner}'),('${employee}');
+ insert into productos values(1,'Corset',20,5,2);`);
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../supabase/migrations/202610210001_commerce.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../supabase/migrations/202611060002_tasas.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await db.exec(
+      `insert into perfiles values('${owner}','Dueño','dueno'),('${employee}','Vendedora','empleado');`,
+    );
+    // Por defecto hay una única fila
+    const seed = (await db.query("select bcv,paralelo from pc_tasas")).rows;
+    assert.equal(seed.length, 1);
+    // El empleado puede leer pero no escribir
+    await db.exec(
+      `reset role; set role authenticated; select set_config('request.jwt.claim.sub','${employee}',false);`,
+    );
+    assert.equal(
+      Number((await db.query("select paralelo from pc_tasas")).rows[0].paralelo),
+      40,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "update pc_tasas set paralelo=41 where id=1 returning id",
+        )
+      ).rows.length,
+      0,
+    );
+    // El dueño puede actualizar; la auditoría registra el cambio
+    await db.exec(
+      `reset role; set role authenticated; select set_config('request.jwt.claim.sub','${owner}',false);`,
+    );
+    await db.query("update pc_tasas set bcv=42.5, paralelo=45 where id=1");
+    const row = (
+      await db.query("select bcv,paralelo,actualizado_por from pc_tasas")
+    ).rows[0];
+    assert.equal(Number(row.bcv), 42.5);
+    assert.equal(Number(row.paralelo), 45);
+    assert.equal(row.actualizado_por, owner);
+    await db.exec(`reset role;`);
+    assert.ok(
+      (
+        await db.query(
+          `select exists(select 1 from pc_auditoria where tabla='pc_tasas' and accion='UPDATE') ok`,
+        )
+      ).rows[0].ok,
+    );
+    // El rol anónimo no ve nada
+    await db.exec(`reset role; set role anon;`);
+    await assert.rejects(
+      db.query("select * from pc_tasas"),
+      /permission denied|row-level security/,
+    );
+  } finally {
+    await db.close();
+  }
+});
