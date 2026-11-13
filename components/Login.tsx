@@ -10,7 +10,7 @@ import Icon from "./Icon";
 const ALIAS = (process.env.NEXT_PUBLIC_ADMIN_ALIAS || "oritoro")
   .trim()
   .toLowerCase();
-const ALIAS_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "oritoro@purplecat.app")
+const ALIAS_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@purplecat.test")
   .trim()
   .toLowerCase();
 export default function Login() {
